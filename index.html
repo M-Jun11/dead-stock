@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>不動在庫管理</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+  :root {
+    --bg:#f5f4f0;--surface:#fff;--surface2:#f0efe9;--border:#e2e0d8;--border2:#ccc9be;
+    --text:#1a1917;--text2:#6b6860;--text3:#9e9b93;
+    --accent:#2d5a3d;--accent-light:#e8f2eb;
+    --red:#c0392b;--red-light:#fdf0ee;--amber:#b7621a;--amber-light:#fdf5ec;
+    --blue:#1a4a8a;--blue-light:#eef3fb;
+    --radius:6px;--radius-lg:10px;--shadow:0 1px 3px rgba(0,0,0,0.08);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;min-height:100vh}
+
+  header{background:var(--accent);color:white;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,0.15)}
+  header h1{font-size:15px;font-weight:700;letter-spacing:0.05em}
+  header .subtitle{font-size:10px;opacity:0.75;font-family:'IBM Plex Mono',monospace}
+
+  .tabs{display:flex;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:52px;z-index:99}
+  .tab{flex:1;padding:12px 8px;text-align:center;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+  .page{display:none;padding:12px 12px 80px}
+  .page.active{display:block}
+
+  /* スキャンページ */
+  .scan-btn{width:100%;padding:18px;background:var(--accent);color:white;border:none;border-radius:var(--radius-lg);font-size:16px;font-family:'Noto Sans JP',sans-serif;font-weight:700;cursor:pointer;letter-spacing:0.05em;margin-bottom:16px;transition:opacity 0.15s}
+  .scan-btn:hover{opacity:0.88}
+  .scan-btn:active{opacity:0.75}
+
+  #scannerWrap{display:none;position:relative;border-radius:var(--radius-lg);overflow:hidden;background:#000;margin-bottom:16px}
+  #scannerWrap video{width:100%;display:block;max-height:260px;object-fit:cover}
+  .scan-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  .scan-frame{width:80%;height:80px;border:2px solid rgba(255,255,255,0.8);border-radius:6px;box-shadow:0 0 0 9999px rgba(0,0,0,0.4)}
+  .scan-line{position:absolute;left:10%;right:10%;height:2px;background:rgba(255,80,80,0.8);animation:scanline 1.8s ease-in-out infinite}
+  @keyframes scanline{0%,100%{top:15%}50%{top:75%}}
+  .scan-hint{position:absolute;bottom:12px;left:0;right:0;text-align:center;color:rgba(255,255,255,0.85);font-size:12px}
+
+  .stop-btn{width:100%;padding:10px;background:transparent;color:var(--red);border:1.5px solid var(--red);border-radius:var(--radius);font-size:13px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;margin-bottom:16px}
+
+  .result-card{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);padding:16px;box-shadow:var(--shadow);margin-bottom:12px}
+  .result-card.found{border-left:4px solid var(--accent)}
+  .result-card.not-found{border-left:4px solid var(--text3)}
+  .result-card.expired{border-left:4px solid var(--red)}
+  .result-card.expiring{border-left:4px solid var(--amber)}
+
+  .result-title{font-size:11px;color:var(--text3);font-family:'IBM Plex Mono',monospace;margin-bottom:8px;letter-spacing:0.06em;text-transform:uppercase}
+  .result-name{font-size:15px;font-weight:700;margin-bottom:8px;line-height:1.4}
+  .result-exp{font-size:22px;font-weight:700;font-family:'IBM Plex Mono',monospace;margin:8px 0}
+  .result-exp.ok{color:var(--accent)}
+  .result-exp.warn{color:var(--amber)}
+  .result-exp.danger{color:var(--red)}
+
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+  .info-item{background:var(--bg);border-radius:var(--radius);padding:8px 10px}
+  .info-label{font-size:10px;color:var(--text3);letter-spacing:0.05em;text-transform:uppercase}
+  .info-val{font-size:13px;font-weight:500;font-family:'IBM Plex Mono',monospace;margin-top:2px}
+
+  .badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:99px;font-weight:500;margin:2px}
+  .b-red{background:var(--red-light);color:var(--red)}
+  .b-amber{background:var(--amber-light);color:var(--amber)}
+  .b-blue{background:var(--blue-light);color:var(--blue)}
+  .b-gray{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
+
+  .raw-info{background:var(--surface2);border-radius:var(--radius);padding:10px;font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--text2);margin-top:10px;word-break:break-all}
+
+  .history-list{display:flex;flex-direction:column;gap:8px}
+  .history-item{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;box-shadow:var(--shadow)}
+  .history-name{font-size:13px;font-weight:500;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .history-exp{font-size:12px;font-family:'IBM Plex Mono',monospace;font-weight:500}
+  .history-exp.ok{color:var(--accent)}
+  .history-exp.warn{color:var(--amber)}
+  .history-exp.danger{color:var(--red)}
+  .history-time{font-size:10px;color:var(--text3);margin-top:2px}
+  .clear-btn{font-size:11px;padding:4px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface);color:var(--text2);cursor:pointer}
+
+  /* 一覧ページ */
+  .summary-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px}
+  @media(min-width:600px){.summary-grid{grid-template-columns:repeat(4,1fr)}}
+  .metric{background:var(--surface);border-radius:var(--radius);padding:12px;border:1px solid var(--border);box-shadow:var(--shadow)}
+  .metric-label{font-size:10px;color:var(--text3);letter-spacing:0.06em;font-weight:500;text-transform:uppercase}
+  .metric-val{font-size:20px;font-weight:700;margin-top:2px;font-family:'IBM Plex Mono',monospace}
+  .metric-val.red{color:var(--red)}.metric-val.amber{color:var(--amber)}.metric-val.green{color:var(--accent)}
+
+  .filters{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);padding:12px;margin-bottom:10px;display:flex;flex-wrap:wrap;gap:8px;box-shadow:var(--shadow)}
+  .filters input,.filters select{font-family:'Noto Sans JP',sans-serif;font-size:12px;padding:6px 10px;height:32px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);outline:none}
+  .filters input{flex:1;min-width:130px}
+
+  .count-bar{font-size:11px;color:var(--text3);font-family:'IBM Plex Mono',monospace;margin-bottom:6px}
+  .tbl-wrap{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);overflow-x:auto;box-shadow:var(--shadow);-webkit-overflow-scrolling:touch}
+  table{width:100%;border-collapse:collapse;font-size:12px;min-width:780px}
+  thead th{background:var(--surface2);padding:8px 10px;text-align:left;font-weight:500;font-size:10px;color:var(--text2);border-bottom:1px solid var(--border);white-space:nowrap;letter-spacing:0.04em}
+  tbody td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle;white-space:nowrap}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover td{background:var(--surface2)}
+  .name-cell{max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .neg{color:var(--red);font-weight:700;font-family:'IBM Plex Mono',monospace}
+  .num{font-family:'IBM Plex Mono',monospace}
+  .muted{color:var(--text3)}
+  .keika-red{color:var(--red);font-weight:500}
+  .keika-amber{color:var(--amber);font-weight:500}
+
+  .pager{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:14px;font-size:12px;color:var(--text2)}
+  .pager button{font-family:'Noto Sans JP',sans-serif;font-size:12px;padding:6px 14px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--surface);color:var(--text);cursor:pointer}
+  .pager button:disabled{opacity:0.35;cursor:default}
+  .empty{text-align:center;padding:40px;color:var(--text3);font-size:13px}
+
+  .fab-filter{display:none;position:fixed;bottom:20px;right:20px;background:var(--accent);color:white;border:none;border-radius:50px;padding:12px 20px;font-size:13px;font-family:'Noto Sans JP',sans-serif;font-weight:500;cursor:pointer;box-shadow:0 4px 16px rgba(45,90,61,0.35);z-index:200}
+  @media(max-width:599px){
+    .fab-filter{display:block}
+    .filters{display:none}
+    .filters.open{display:flex}
+  }
+  .no-support{background:var(--amber-light);border:1px solid var(--amber);border-radius:var(--radius);padding:12px;font-size:13px;color:var(--amber);margin-bottom:12px;display:none}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="subtitle">PHARMACY</div>
+    <h1>不動在庫管理システム</h1>
+  </div>
+  <div style="font-size:10px;opacity:0.7;font-family:'IBM Plex Mono',monospace;text-align:right">更新日<br>2026/03/23</div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('scan')">📷 バーコードスキャン</div>
+  <div class="tab" onclick="switchTab('list')">📋 在庫一覧</div>
+</div>
+
+<!-- スキャンページ -->
+<div class="page active" id="page-scan">
+  <div class="no-support" id="noSupport">このブラウザはカメラへのアクセスに対応していません。ChromeまたはSafariでお試しください。</div>
+  <button class="scan-btn" id="startBtn" onclick="startScan()">📷 バーコードをスキャン</button>
+  <div id="scannerWrap">
+    <video id="video" playsinline autoplay muted></video>
+    <div class="scan-overlay">
+      <div style="position:relative;width:80%;height:80px">
+        <div class="scan-frame"></div>
+        <div class="scan-line"></div>
+      </div>
+    </div>
+    <div class="scan-hint">バーコードを枠内に合わせてください</div>
+  </div>
+  <button class="stop-btn" id="stopBtn" style="display:none" onclick="stopScan()">■ スキャンを停止</button>
+
+  <div id="resultArea"></div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;margin-top:4px">
+    <div style="font-size:12px;font-weight:500;color:var(--text2)">スキャン履歴</div>
+    <button class="clear-btn" onclick="clearHistory()">履歴をクリア</button>
+  </div>
+  <div class="history-list" id="historyList">
+    <div class="empty" style="padding:20px">スキャン履歴はありません</div>
+  </div>
+</div>
+
+<!-- 一覧ページ -->
+<div class="page" id="page-list">
+  <div class="summary-grid" id="summ"></div>
+  <div class="filters" id="filters">
+    <input type="search" id="q" placeholder="品名・コードで検索…" oninput="go()">
+    <select id="cat" onchange="go()">
+      <option value="">全区分</option><option>内服薬</option><option>外用薬</option><option>注射薬</option>
+    </select>
+    <select id="brd" onchange="go()">
+      <option value="">先発/後発</option><option>先発品</option><option>後発品</option>
+    </select>
+    <select id="alt" onchange="go()">
+      <option value="">全アラート</option>
+      <option value="neg">マイナス在庫</option>
+      <option value="kei">経過措置あり</option>
+      <option value="dis">発売中止あり</option>
+      <option value="exp">有効期限1年以内</option>
+      <option value="spc">規制薬</option>
+    </select>
+    <select id="srt" onchange="go()">
+      <option value="stock_d">在庫金額↓</option>
+      <option value="stock_a">在庫金額↑</option>
+      <option value="months_d">不動月数↓</option>
+      <option value="qty_d">数量↓</option>
+      <option value="name_a">品名↑</option>
+    </select>
+  </div>
+  <div class="count-bar" id="countBar"></div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr>
+        <th>コード</th><th>品名</th><th>区分</th><th>先/後</th><th>規制</th>
+        <th>数量</th><th>在庫金額</th><th>不動月数</th><th>最終処方日</th>
+        <th>有効期限</th><th>経過措置</th><th>発売中止</th><th>アラート</th>
+      </tr></thead>
+      <tbody id="tb"></tbody>
+    </table>
+  </div>
+  <div class="pager">
+    <button id="prv" onclick="changePage(-1)">← 前へ</button>
+    <span id="pi"></span>
+    <button id="nxt" onclick="changePage(1)">次へ →</button>
+  </div>
+</div>
+
+<button class="fab-filter" onclick="document.getElementById('filters').classList.toggle('open')">☰ フィルター</button>
+
+<!-- ZXing バーコードライブラリ -->
+<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
+
+<script>
+const TODAY = new Date('2026-03-23');
+
+// =====================
+// 在庫データ
+// =====================
+const DATA = [
+  {code:'217128',name:'ラシックス錠４０ｍｇ',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:119,stock:1095,rawMonths:'6(203)',lastRx:'2025/09/01',exp:'2027/04',keika:'-',hanbai:'-'},
+  {code:'220980',name:'プロ・バンサイン錠１５ｍｇ',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:126,stock:684,rawMonths:'6(201)',lastRx:'2025/09/03',exp:'2028/02',keika:'-',hanbai:'-'},
+  {code:'225075',name:'グリクラジド錠４０ｍｇ「サワイ」',cat:'内服薬',brand:'後発品',geki:true,doku:false,muko:false,qty:32,stock:175,rawMonths:'6(201)',lastRx:'2025/09/03',exp:'-',keika:'2026/03/31',hanbai:'2025/05/01'},
+  {code:'226631',name:'トラマールＯＤ錠２５ｍｇ',cat:'内服薬',brand:'先発品',geki:true,doku:false,muko:false,qty:148,stock:1931,rawMonths:'6(198)',lastRx:'2025/09/06',exp:'2027/10',keika:'-',hanbai:'-'},
+  {code:'406070',name:'リドメックスコーワ軟膏０．３％',cat:'外用薬',brand:'先発品',geki:false,doku:false,muko:false,qty:90,stock:1177,rawMonths:'6(198)',lastRx:'2025/09/06',exp:'2029/03',keika:'-',hanbai:'-'},
+  {code:'220298',name:'ポリフル細粒８３．３％',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:193,stock:2469,rawMonths:'6(196)',lastRx:'2025/09/08',exp:'-',keika:'-',hanbai:'-'},
+  {code:'227884',name:'ペンタサ顆粒９４％',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:190.8,stock:15359,rawMonths:'6(194)',lastRx:'2025/09/10',exp:'2027/07',keika:'-',hanbai:'-'},
+  {code:'406105',name:'スタデルム軟膏５％',cat:'外用薬',brand:'先発品',geki:false,doku:false,muko:false,qty:90,stock:889,rawMonths:'6(194)',lastRx:'2025/09/10',exp:'2029/04',keika:'-',hanbai:'-'},
+  {code:'226660',name:'エチゾラム錠０．２５ｍｇ「ＳＷ」',cat:'内服薬',brand:'後発品',geki:false,doku:false,muko:true,qty:165,stock:848,rawMonths:'6(192)',lastRx:'2025/09/12',exp:'2028/03',keika:'-',hanbai:'-'},
+  {code:'232146',name:'バルヒディオ配合錠ＥＸ「ＮＩＧ」',cat:'内服薬',brand:'後発品',geki:false,doku:false,muko:false,qty:76,stock:1300,rawMonths:'6(192)',lastRx:'2025/09/12',exp:'2027/12',keika:'-',hanbai:'2026/01/31'},
+  {code:'403562',name:'スチックゼノールＡ',cat:'外用薬',brand:'先発品',geki:false,doku:false,muko:false,qty:200,stock:0,rawMonths:'6(192)',lastRx:'2025/09/12',exp:'-',keika:'-',hanbai:'-'},
+  {code:'221476',name:'クラビット錠５００ｍｇ',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:17,stock:2266,rawMonths:'6(187)',lastRx:'2025/09/17',exp:'-',keika:'-',hanbai:'-'},
+  {code:'203491',name:'コンスタン０．４ｍｇ錠',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:true,qty:-75,stock:-365,rawMonths:'6(185)',lastRx:'2025/09/19',exp:'-',keika:'-',hanbai:'-'},
+  {code:'229498',name:'カルシトリオールカプセル０．５μｇ「トーワ」',cat:'内服薬',brand:'後発品',geki:true,doku:false,muko:false,qty:-60,stock:0,rawMonths:'6(185)',lastRx:'2025/09/19',exp:'-',keika:'2025/03/31',hanbai:'-'},
+  {code:'220105',name:'ボルタレン錠２５ｍｇ',cat:'内服薬',brand:'先発品',geki:true,doku:false,muko:false,qty:110,stock:607,rawMonths:'6(184)',lastRx:'2025/09/20',exp:'2027/08',keika:'-',hanbai:'-'},
+  {code:'226197',name:'ビソプロロールフマル酸塩錠０．６２５ｍｇ「トーワ」',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:-180,stock:-1526,rawMonths:'6(184)',lastRx:'2025/09/20',exp:'-',keika:'-',hanbai:'-'},
+  {code:'231838',name:'ミネブロＯＤ錠１．２５ｍｇ',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:-30,stock:-1259,rawMonths:'6(184)',lastRx:'2025/09/20',exp:'-',keika:'-',hanbai:'-'},
+  {code:'222287',name:'サルポグレラート塩酸塩錠１００ｍｇ「サワイ」',cat:'内服薬',brand:'後発品',geki:false,doku:false,muko:false,qty:215,stock:6682,rawMonths:'6(182)',lastRx:'2025/09/22',exp:'2027/08',keika:'-',hanbai:'-'},
+  {code:'406853',name:'ベピオゲル２．５％',cat:'外用薬',brand:'先発品',geki:false,doku:false,muko:false,qty:135,stock:9969,rawMonths:'6(180)',lastRx:'2025/09/24',exp:'2027/03',keika:'-',hanbai:'-'},
+  {code:'211028',name:'トリプタノール錠１０',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:107.5,stock:897,rawMonths:'6(179)',lastRx:'2025/09/25',exp:'2027/10',keika:'-',hanbai:'-'},
+  {code:'219558',name:'０１７クラシエ五苓散料エキス錠',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:1203,stock:6636,rawMonths:'6(179)',lastRx:'2025/09/25',exp:'2028/08',keika:'-',hanbai:'-'},
+  {code:'231265',name:'クレンブテロール錠１０μｇ「ハラサワ」',cat:'内服薬',brand:'後発品',geki:false,doku:false,muko:false,qty:100,stock:512,rawMonths:'6(177)',lastRx:'2025/09/27',exp:'2028/02',keika:'-',hanbai:'-'},
+  {code:'200316',name:'アデホスコーワ腸溶錠２０　２０ｍｇ',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:58,stock:285,rawMonths:'6(175)',lastRx:'2025/09/29',exp:'2028/02',keika:'-',hanbai:'-'},
+  {code:'207429',name:'ビオフェルミンＲ錠',cat:'内服薬',brand:'後発品',geki:false,doku:false,muko:false,qty:72,stock:352,rawMonths:'6(175)',lastRx:'2025/09/29',exp:'2028/08',keika:'-',hanbai:'-'},
+  {code:'210483',name:'レキソタン錠５　５ｍｇ',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:true,qty:94,stock:526,rawMonths:'6(175)',lastRx:'2025/09/29',exp:'2029/12',keika:'-',hanbai:'-'},
+  {code:'218830',name:'ベプリコール錠５０ｍｇ',cat:'内服薬',brand:'先発品',geki:true,doku:false,muko:false,qty:165,stock:0,rawMonths:'-',lastRx:'-',exp:'-',keika:'-',hanbai:'-'},
+  {code:'225265',name:'イルトラ配合錠ＨＤ',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:56,stock:0,rawMonths:'-',lastRx:'-',exp:'-',keika:'-',hanbai:'-'},
+  {code:'226152',name:'タケルダ配合錠',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:40,stock:588,rawMonths:'-',lastRx:'-',exp:'2027/09',keika:'-',hanbai:'-'},
+  {code:'228308',name:'ロサルヒド配合錠ＨＤ「サワイ」',cat:'内服薬',brand:'後発品',geki:false,doku:false,muko:false,qty:200,stock:4762,rawMonths:'-',lastRx:'-',exp:'2028/09',keika:'-',hanbai:'-'},
+  {code:'228692',name:'テルチア配合錠ＡＰ「サワイ」',cat:'内服薬',brand:'後発品',geki:false,doku:false,muko:false,qty:115,stock:0,rawMonths:'-',lastRx:'-',exp:'-',keika:'-',hanbai:'-'},
+  {code:'407876',name:'エフィナコナゾール爪外用液１０％「科研」',cat:'外用薬',brand:'後発品',geki:false,doku:false,muko:false,qty:17.8,stock:10894,rawMonths:'-',lastRx:'-',exp:'2028/02',keika:'-',hanbai:'-'},
+];
+
+// =====================
+// タブ切替
+// =====================
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', (tab==='scan'&&i===0)||(tab==='list'&&i===1)));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-'+tab).classList.add('active');
+  if (tab === 'list') renderList();
+}
+
+// =====================
+// バーコードスキャン
+// =====================
+let codeReader = null;
+let scanning = false;
+let scanHistory = [];
+
+function parseGS1(raw) {
+  // GS1-128: AI(01)=GTIN14, AI(17)=有効期限YYMMDD, AI(10)=ロット
+  const result = { gtin: null, exp: null, lot: null, raw };
+  // FNC1区切り文字を除去しパース
+  let s = raw.replace(/[\u001d\u00e8]/g, '|');
+  // AI 01: 14桁GTIN
+  let m = s.match(/(?:^|\|)01(\d{14})/);
+  if (m) result.gtin = m[1];
+  // AI 17: 有効期限 YYMMDD
+  m = s.match(/(?:^|\|)17(\d{6})/);
+  if (m) {
+    const yy = parseInt(m[1].slice(0,2));
+    const mm = parseInt(m[1].slice(2,4));
+    const dd = parseInt(m[1].slice(4,6));
+    const yyyy = yy + (yy < 50 ? 2000 : 1900);
+    const lastDay = dd === 0 ? new Date(yyyy, mm, 0).getDate() : dd;
+    result.exp = new Date(yyyy, mm-1, lastDay === 0 ? 1 : lastDay);
+    result.expStr = `${yyyy}/${String(mm).padStart(2,'0')}${dd>0?'/'+String(dd).padStart(2,'0'):''}`;
+  }
+  // AI 10: ロット
+  m = s.match(/(?:^|\|)10([^\|]+)/);
+  if (m) result.lot = m[1];
+
+  // JANコード（下8or13桁）から明細コードを推定
+  if (result.gtin) {
+    const jan = result.gtin.slice(-13).replace(/^0+/,'').slice(0,-1);
+    result.janCode = jan;
+  }
+  return result;
+}
+
+function findDrug(parsed) {
+  if (!parsed.gtin) return null;
+  // 明細コードとGTINの下6桁で照合を試みる
+  const short = parsed.gtin.slice(-8,- 1).replace(/^0+/,'');
+  return DATA.find(d => d.code && (d.code === short || parsed.gtin.includes(d.code)));
+}
+
+function expStatus(expDate) {
+  if (!expDate) return { cls: '', label: '有効期限情報なし' };
+  const diff = (expDate - TODAY) / (1000*60*60*24);
+  if (diff < 0) return { cls: 'danger', label: '期限切れ' };
+  if (diff <= 90) return { cls: 'danger', label: `残り${Math.floor(diff)}日` };
+  if (diff <= 365) return { cls: 'warn', label: `残り約${Math.floor(diff/30)}ヶ月` };
+  return { cls: 'ok', label: `残り約${Math.floor(diff/365)}年${Math.floor((diff%365)/30)}ヶ月` };
+}
+
+function getAlerts(r) {
+  const a = [];
+  if (r.qty < 0) a.push({cls:'b-red', txt:'マイナス在庫'});
+  if (r.keika && r.keika!=='-') {
+    const d = parseDate(r.keika);
+    if (d && d <= TODAY) a.push({cls:'b-red', txt:'経過措置切れ'});
+    else if (d) a.push({cls:'b-amber', txt:'経過措置あり'});
+  }
+  if (r.hanbai && r.hanbai!=='-') a.push({cls:'b-amber', txt:'発売中止'});
+  return a;
+}
+
+function showResult(parsed) {
+  const drug = findDrug(parsed);
+  const st = expStatus(parsed.exp);
+  const now = new Date();
+  const timeStr = now.getHours()+':'+String(now.getMinutes()).padStart(2,'0');
+
+  let html = '';
+  if (parsed.exp) {
+    const cardCls = st.cls === 'danger' ? (parsed.exp < TODAY ? 'expired' : 'expiring') : 'found';
+    html += `<div class="result-card ${drug ? cardCls : 'not-found'}">`;
+    html += `<div class="result-title">スキャン結果</div>`;
+    if (drug) {
+      html += `<div class="result-name">${drug.name}</div>`;
+    } else {
+      html += `<div class="result-name" style="color:var(--text2)">在庫リストに一致する薬品なし</div>`;
+    }
+    html += `<div class="result-exp ${st.cls}">${parsed.expStr || '—'}</div>`;
+    html += `<div style="font-size:12px;color:var(--text2);margin-bottom:8px">${st.label}</div>`;
+
+    if (drug) {
+      const al = getAlerts(drug);
+      html += `<div class="info-grid">`;
+      html += `<div class="info-item"><div class="info-label">在庫金額</div><div class="info-val">${drug.stock.toLocaleString()}円</div></div>`;
+      html += `<div class="info-item"><div class="info-label">数量</div><div class="info-val ${drug.qty<0?'neg':''}">${drug.qty}</div></div>`;
+      html += `<div class="info-item"><div class="info-label">不動月数</div><div class="info-val">${drug.rawMonths}</div></div>`;
+      html += `<div class="info-item"><div class="info-label">最終処方日</div><div class="info-val">${drug.lastRx}</div></div>`;
+      html += `</div>`;
+      if (al.length) html += `<div style="margin-top:8px">${al.map(a=>`<span class="badge ${a.cls}">${a.txt}</span>`).join('')}</div>`;
+    }
+    html += `<div class="raw-info">RAW: ${parsed.raw.slice(0,60)}${parsed.raw.length>60?'…':''}</div>`;
+    html += `</div>`;
+
+    // 履歴追加
+    scanHistory.unshift({
+      name: drug ? drug.name : '不明（リスト外）',
+      expStr: parsed.expStr,
+      expDate: parsed.exp,
+      status: st,
+      time: timeStr
+    });
+    if (scanHistory.length > 20) scanHistory.pop();
+    renderHistory();
+  } else {
+    html = `<div class="result-card not-found">
+      <div class="result-title">スキャン結果</div>
+      <div style="color:var(--text2);font-size:13px">有効期限情報を読み取れませんでした。<br>GS1-128バーコード（医薬品用）を正面からスキャンしてください。</div>
+      <div class="raw-info">RAW: ${parsed.raw.slice(0,80)}</div>
+    </div>`;
+  }
+  document.getElementById('resultArea').innerHTML = html;
+}
+
+function renderHistory() {
+  const el = document.getElementById('historyList');
+  if (!scanHistory.length) {
+    el.innerHTML = '<div class="empty" style="padding:20px">スキャン履歴はありません</div>';
+    return;
+  }
+  el.innerHTML = scanHistory.map(h => `
+    <div class="history-item">
+      <div>
+        <div class="history-name">${h.name}</div>
+        <div class="history-time">${h.time}</div>
+      </div>
+      <div class="history-exp ${h.status.cls}">${h.expStr || '—'}</div>
+    </div>
+  `).join('');
+}
+
+function clearHistory() {
+  scanHistory = [];
+  renderHistory();
+}
+
+async function startScan() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    document.getElementById('noSupport').style.display = 'block';
+    return;
+  }
+  document.getElementById('startBtn').style.display = 'none';
+  document.getElementById('scannerWrap').style.display = 'block';
+  document.getElementById('stopBtn').style.display = 'block';
+  scanning = true;
+
+  try {
+    codeReader = new ZXing.BrowserMultiFormatReader();
+    const videoEl = document.getElementById('video');
+    await codeReader.decodeFromConstraints(
+      { video: { facingMode: 'environment' } },
+      videoEl,
+      (result, err) => {
+        if (result && scanning) {
+          const parsed = parseGS1(result.getText());
+          showResult(parsed);
+        }
+      }
+    );
+  } catch(e) {
+    document.getElementById('scannerWrap').style.display = 'none';
+    document.getElementById('startBtn').style.display = 'block';
+    document.getElementById('stopBtn').style.display = 'none';
+    document.getElementById('resultArea').innerHTML = `<div class="result-card not-found"><div class="result-title">エラー</div><div style="font-size:13px;color:var(--text2)">カメラへのアクセスが許可されていません。ブラウザの設定でカメラを許可してください。</div></div>`;
+  }
+}
+
+function stopScan() {
+  scanning = false;
+  if (codeReader) { codeReader.reset(); codeReader = null; }
+  document.getElementById('scannerWrap').style.display = 'none';
+  document.getElementById('startBtn').style.display = 'block';
+  document.getElementById('stopBtn').style.display = 'none';
+}
+
+// =====================
+// 在庫一覧
+// =====================
+let cur = [], pgn = 0;
+const PG = 25;
+
+function parseDate(s) {
+  if (!s || s==='-'||s==='－') return null;
+  const p = s.replace(/－/g,'-').split('/');
+  if (p.length===2) return new Date(parseInt(p[0]),parseInt(p[1])-1,1);
+  if (p.length===3) return new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));
+  return null;
+}
+
+function getAlertsForList(r) {
+  const a=[];
+  if(r.qty<0)a.push({cls:'b-red',txt:'マイナス在庫'});
+  if(r.keika&&r.keika!=='-'){const d=parseDate(r.keika);if(d&&d<=TODAY)a.push({cls:'b-red',txt:'経過措置切れ'});else if(d)a.push({cls:'b-amber',txt:'経過措置あり'});}
+  if(r.hanbai&&r.hanbai!=='-')a.push({cls:'b-amber',txt:'発売中止'});
+  if(r.exp&&r.exp!=='-'){const d=parseDate(r.exp);if(d){const m=(d-TODAY)/(1000*60*60*24*30);if(m>=0&&m<=12)a.push({cls:'b-amber',txt:'期限1年以内'});}}
+  return a;
+}
+
+function go(){pgn=0;renderList();}
+function changePage(d){pgn+=d;renderList();}
+
+function renderList(){
+  const q=document.getElementById('q').value.toLowerCase();
+  const cat=document.getElementById('cat').value;
+  const brd=document.getElementById('brd').value;
+  const alt=document.getElementById('alt').value;
+  const srt=document.getElementById('srt').value;
+
+  cur=DATA.filter(r=>{
+    if(q&&!r.name.toLowerCase().includes(q)&&!r.code.includes(q))return false;
+    if(cat&&r.cat!==cat)return false;
+    if(brd&&r.brand!==brd)return false;
+    if(alt==='neg'&&r.qty>=0)return false;
+    if(alt==='kei'&&(!r.keika||r.keika==='-'))return false;
+    if(alt==='dis'&&(!r.hanbai||r.hanbai==='-'))return false;
+    if(alt==='exp'){const d=parseDate(r.exp);if(!d)return false;const m=(d-TODAY)/(1000*60*60*24*30);if(m<0||m>12)return false;}
+    if(alt==='spc'&&!r.geki&&!r.doku&&!r.muko)return false;
+    return true;
+  });
+  cur.sort((a,b)=>{
+    if(srt==='stock_d')return b.stock-a.stock;
+    if(srt==='stock_a')return a.stock-b.stock;
+    if(srt==='months_d')return(parseInt(b.rawMonths)||0)-(parseInt(a.rawMonths)||0);
+    if(srt==='qty_d')return b.qty-a.qty;
+    if(srt==='name_a')return a.name.localeCompare(b.name,'ja');
+    return 0;
+  });
+
+  const total=cur.length;
+  const pages=Math.max(1,Math.ceil(total/PG));
+  if(pgn>=pages)pgn=pages-1;
+  if(pgn<0)pgn=0;
+  const slice=cur.slice(pgn*PG,pgn*PG+PG);
+
+  const totalStock=DATA.filter(d=>d.stock>0).reduce((s,d)=>s+d.stock,0);
+  const negCnt=DATA.filter(d=>d.qty<0).length;
+  const alertCnt=DATA.filter(d=>getAlertsForList(d).length>0).length;
+
+  document.getElementById('summ').innerHTML=`
+    <div class="metric"><div class="metric-label">品目数</div><div class="metric-val green">${DATA.length}</div></div>
+    <div class="metric"><div class="metric-label">在庫金額合計</div><div class="metric-val">${totalStock.toLocaleString()}円</div></div>
+    <div class="metric"><div class="metric-label">マイナス在庫</div><div class="metric-val red">${negCnt}品目</div></div>
+    <div class="metric"><div class="metric-label">要確認</div><div class="metric-val amber">${alertCnt}品目</div></div>
+  `;
+  document.getElementById('countBar').textContent=`${total}件表示中（全${DATA.length}件）`;
+
+  document.getElementById('tb').innerHTML=slice.length?slice.map(r=>{
+    const al=getAlertsForList(r);
+    const flags=[r.geki?'劇薬':'',r.doku?'毒薬':'',r.muko?'向精神薬':''].filter(Boolean);
+    const neg=r.qty<0;
+    const kd=parseDate(r.keika);
+    const kCls=r.keika!=='-'?(kd&&kd<=TODAY?'keika-red':'keika-amber'):'muted';
+    return `<tr>
+      <td class="num" style="color:var(--text3);font-size:11px">${r.code||'—'}</td>
+      <td class="name-cell" title="${r.name}">${r.name}</td>
+      <td>${r.cat}</td>
+      <td>${r.brand==='先発品'?'先発':'後発'}</td>
+      <td>${flags.map(f=>`<span class="badge b-blue">${f}</span>`).join('')}</td>
+      <td class="${neg?'neg':'num'}">${r.qty}</td>
+      <td class="${neg?'neg':'num'}">${r.stock.toLocaleString()}</td>
+      <td class="num">${r.rawMonths}</td>
+      <td>${r.lastRx}</td>
+      <td>${r.exp}</td>
+      <td class="${r.keika!=='-'?kCls:'muted'}">${r.keika!=='-'?r.keika:'—'}</td>
+      <td class="${r.hanbai!=='-'?'keika-red':'muted'}">${r.hanbai!=='-'?r.hanbai:'—'}</td>
+      <td>${al.map(a=>`<span class="badge ${a.cls}">${a.txt}</span>`).join('')}</td>
+    </tr>`;
+  }).join(''):`<tr><td colspan="13" class="empty">該当するデータがありません</td></tr>`;
+
+  document.getElementById('pi').textContent=`${pgn+1} / ${pages} ページ`;
+  document.getElementById('prv').disabled=pgn===0;
+  document.getElementById('nxt').disabled=pgn>=pages-1;
+}
+
+renderHistory();
+</script>
+</body>
+</html>
