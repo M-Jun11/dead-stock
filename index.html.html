@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>不動在庫管理</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #f5f4f0;
+    --surface: #ffffff;
+    --surface2: #f0efe9;
+    --border: #e2e0d8;
+    --border2: #ccc9be;
+    --text: #1a1917;
+    --text2: #6b6860;
+    --text3: #9e9b93;
+    --accent: #2d5a3d;
+    --accent-light: #e8f2eb;
+    --red: #c0392b;
+    --red-light: #fdf0ee;
+    --amber: #b7621a;
+    --amber-light: #fdf5ec;
+    --blue: #1a4a8a;
+    --blue-light: #eef3fb;
+    --gray-light: #f0efe9;
+    --radius: 6px;
+    --radius-lg: 10px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Noto Sans JP', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  header {
+    background: var(--accent);
+    color: white;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+
+  header h1 {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+
+  header .subtitle {
+    font-size: 11px;
+    opacity: 0.75;
+    font-family: 'IBM Plex Mono', monospace;
+    margin-top: 1px;
+  }
+
+  .upload-area {
+    background: var(--surface);
+    border: 2px dashed var(--border2);
+    border-radius: var(--radius-lg);
+    padding: 40px 20px;
+    text-align: center;
+    margin: 20px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+  }
+
+  .upload-area:hover, .upload-area.dragover {
+    border-color: var(--accent);
+    background: var(--accent-light);
+  }
+
+  .upload-area .icon {
+    font-size: 36px;
+    margin-bottom: 10px;
+  }
+
+  .upload-area p {
+    color: var(--text2);
+    font-size: 13px;
+    margin-top: 6px;
+  }
+
+  .upload-area strong {
+    color: var(--accent);
+  }
+
+  #fileInput { display: none; }
+
+  .btn {
+    display: inline-block;
+    padding: 8px 18px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-family: 'Noto Sans JP', sans-serif;
+    font-weight: 500;
+    cursor: pointer;
+    margin-top: 12px;
+    transition: opacity 0.15s;
+  }
+
+  .btn:hover { opacity: 0.85; }
+
+  .btn-outline {
+    background: transparent;
+    color: var(--accent);
+    border: 1.5px solid var(--accent);
+  }
+
+  .btn-outline:hover { background: var(--accent-light); opacity: 1; }
+
+  .main { padding: 0 12px 80px; display: none; }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin: 14px 0;
+  }
+
+  @media(min-width: 600px) {
+    .summary-grid { grid-template-columns: repeat(4, 1fr); }
+  }
+
+  .metric {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 12px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+  }
+
+  .metric-label {
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 0.06em;
+    font-weight: 500;
+    text-transform: uppercase;
+  }
+
+  .metric-val {
+    font-size: 22px;
+    font-weight: 700;
+    margin-top: 2px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .metric-val.red { color: var(--red); }
+  .metric-val.amber { color: var(--amber); }
+  .metric-val.green { color: var(--accent); }
+
+  .filters {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    padding: 12px;
+    margin-bottom: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    box-shadow: var(--shadow);
+  }
+
+  .filters input, .filters select {
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 12px;
+    padding: 6px 10px;
+    height: 34px;
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .filters input { flex: 1; min-width: 140px; }
+  .filters input:focus, .filters select:focus { border-color: var(--accent); }
+
+  .count-bar {
+    font-size: 11px;
+    color: var(--text3);
+    font-family: 'IBM Plex Mono', monospace;
+    margin-bottom: 6px;
+    padding: 0 2px;
+  }
+
+  .tbl-wrap {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    overflow-x: auto;
+    box-shadow: var(--shadow);
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    min-width: 800px;
+  }
+
+  thead th {
+    background: var(--surface2);
+    padding: 9px 10px;
+    text-align: left;
+    font-weight: 500;
+    font-size: 10px;
+    color: var(--text2);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  thead th:hover { color: var(--text); }
+
+  tbody td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--surface2); }
+
+  .name-cell {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+
+  .neg { color: var(--red); font-weight: 700; font-family: 'IBM Plex Mono', monospace; }
+  .num { font-family: 'IBM Plex Mono', monospace; }
+
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 99px;
+    font-weight: 500;
+    white-space: nowrap;
+    margin: 1px;
+  }
+
+  .b-red { background: var(--red-light); color: var(--red); }
+  .b-amber { background: var(--amber-light); color: var(--amber); }
+  .b-blue { background: var(--blue-light); color: var(--blue); }
+  .b-gray { background: var(--gray-light); color: var(--text2); border: 1px solid var(--border); }
+
+  .pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--text2);
+  }
+
+  .pager button {
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 12px;
+    padding: 6px 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border2);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .pager button:hover:not(:disabled) { background: var(--surface2); }
+  .pager button:disabled { opacity: 0.35; cursor: default; }
+
+  .reload-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding: 0 2px;
+  }
+
+  .reload-bar .loaded-info {
+    font-size: 11px;
+    color: var(--text3);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .empty {
+    text-align: center;
+    padding: 40px;
+    color: var(--text3);
+    font-size: 13px;
+  }
+
+  .keika-red { color: var(--red); font-weight: 500; }
+  .keika-amber { color: var(--amber); font-weight: 500; }
+  .muted { color: var(--text3); }
+
+  /* モバイル用フローティングフィルターボタン */
+  .fab-filter {
+    display: none;
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    padding: 12px 20px;
+    font-size: 13px;
+    font-family: 'Noto Sans JP', sans-serif;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(45,90,61,0.35);
+    z-index: 200;
+  }
+
+  @media(max-width: 599px) {
+    .fab-filter { display: block; }
+    .filters { display: none; }
+    .filters.open { display: flex; }
+    header h1 { font-size: 14px; }
+    .metric-val { font-size: 18px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="subtitle">PHARMACY</div>
+    <h1>不動在庫管理システム</h1>
+  </div>
+  <div id="headerDate" style="font-size:11px;opacity:0.7;font-family:'IBM Plex Mono',monospace;text-align:right"></div>
+</header>
+
+<div id="uploadSection">
+  <div class="upload-area" id="dropZone" onclick="document.getElementById('fileInput').click()">
+    <div class="icon">📋</div>
+    <p><strong>CSVファイルをドロップ</strong>またはクリックして選択</p>
+    <p>不動在庫レポートCSVをアップロードしてください</p>
+    <button class="btn" onclick="event.stopPropagation();document.getElementById('fileInput').click()">ファイルを選択</button>
+  </div>
+  <input type="file" id="fileInput" accept=".csv">
+</div>
+
+<div class="main" id="mainSection">
+  <div class="summary-grid" id="summ"></div>
+  <div class="reload-bar">
+    <div class="loaded-info" id="loadedInfo"></div>
+    <button class="btn btn-outline" style="font-size:11px;padding:5px 12px;height:28px" onclick="document.getElementById('fileInput').click()">CSVを再読込</button>
+  </div>
+  <div class="filters" id="filters">
+    <input type="search" id="q" placeholder="品名で検索…" oninput="go()">
+    <select id="cat" onchange="go()">
+      <option value="">全区分</option>
+      <option>内服薬</option>
+      <option>外用薬</option>
+      <option>注射薬</option>
+    </select>
+    <select id="brd" onchange="go()">
+      <option value="">先発/後発</option>
+      <option>先発品</option>
+      <option>後発品</option>
+    </select>
+    <select id="alt" onchange="go()">
+      <option value="">全アラート</option>
+      <option value="neg">マイナス在庫</option>
+      <option value="kei">経過措置あり</option>
+      <option value="dis">発売中止あり</option>
+      <option value="exp">有効期限1年以内</option>
+      <option value="spc">規制薬</option>
+    </select>
+    <select id="srt" onchange="go()">
+      <option value="stock_d">在庫金額↓</option>
+      <option value="stock_a">在庫金額↑</option>
+      <option value="months_d">不動月数↓</option>
+      <option value="qty_d">数量↓</option>
+      <option value="name_a">品名↑</option>
+    </select>
+  </div>
+  <div class="count-bar" id="countBar"></div>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>明細コード</th>
+          <th>品名</th>
+          <th>区分</th>
+          <th>先/後</th>
+          <th>規制</th>
+          <th>数量</th>
+          <th>在庫金額</th>
+          <th>不動月数</th>
+          <th>最終処方日</th>
+          <th>有効期限</th>
+          <th>経過措置</th>
+          <th>発売中止</th>
+          <th>アラート</th>
+        </tr>
+      </thead>
+      <tbody id="tb"></tbody>
+    </table>
+  </div>
+  <div class="pager">
+    <button id="prv" onclick="changePage(-1)">← 前へ</button>
+    <span id="pi"></span>
+    <button id="nxt" onclick="changePage(1)">次へ →</button>
+  </div>
+</div>
+
+<button class="fab-filter" onclick="document.getElementById('filters').classList.toggle('open')">
+  ☰ フィルター
+</button>
+
+<script>
+const TODAY = new Date();
+let DATA = [], cur = [], pgn = 0;
+const PG = 25;
+
+document.getElementById('headerDate').textContent = TODAY.toLocaleDateString('ja-JP', {year:'numeric',month:'long',day:'numeric'});
+
+// ドラッグ&ドロップ
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('dragover');
+  const f = e.dataTransfer.files[0];
+  if (f) readCSV(f);
+});
+
+document.getElementById('fileInput').addEventListener('change', e => {
+  if (e.target.files[0]) readCSV(e.target.files[0]);
+  e.target.value = '';
+});
+
+function readCSV(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      DATA = parseCSV(e.target.result);
+      document.getElementById('uploadSection').style.display = 'none';
+      document.getElementById('mainSection').style.display = 'block';
+      document.getElementById('loadedInfo').textContent = file.name + ' — ' + DATA.length + '品目読み込み済';
+      go();
+    } catch(err) {
+      alert('CSVの読み込みに失敗しました: ' + err.message);
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function parseCSV(text) {
+  // BOM除去
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const lines = text.split('\n').filter(l => l.trim());
+  const headers = lines[0].split(',');
+
+  const idx = {
+    code: headers.indexOf('明細コード'),
+    name: headers.indexOf('品名'),
+    cat: headers.indexOf('使用区分'),
+    brand: headers.indexOf('先発/後発'),
+    maku: headers.indexOf('麻薬'),
+    kaku: headers.indexOf('覚醒剤'),
+    geki: headers.indexOf('劇薬'),
+    doku: headers.indexOf('毒薬'),
+    muko: headers.indexOf('向精神薬'),
+    qty: headers.indexOf('数量'),
+    stock: headers.indexOf('在庫金額'),
+    months: headers.indexOf('不動月数'),
+    lastRx: headers.indexOf('最終処方日'),
+    exp: headers.indexOf('有効期限'),
+    keika: headers.indexOf('経過措置日'),
+    hanbai: headers.indexOf('発売中止日'),
+  };
+
+  return lines.slice(1).map(line => {
+    const cols = line.split(',');
+    const rawMonths = cols[idx.months] || '-';
+    const monthNum = parseFloat(rawMonths.match(/^(\d+)/)?.[1] || '0');
+    return {
+      code: cols[idx.code]?.trim() || '',
+      name: cols[idx.name]?.trim() || '',
+      cat: cols[idx.cat]?.trim() || '',
+      brand: cols[idx.brand]?.trim() || '',
+      maku: !!cols[idx.maku]?.trim(),
+      kaku: !!cols[idx.kaku]?.trim(),
+      geki: !!cols[idx.geki]?.trim(),
+      doku: !!cols[idx.doku]?.trim(),
+      muko: !!cols[idx.muko]?.trim(),
+      qty: parseFloat(cols[idx.qty]) || 0,
+      stock: parseInt(cols[idx.stock]) || 0,
+      months: monthNum,
+      rawMonths: rawMonths,
+      lastRx: cols[idx.lastRx]?.trim() || '-',
+      exp: cols[idx.exp]?.trim() || '-',
+      keika: cols[idx.keika]?.trim() || '-',
+      hanbai: cols[idx.hanbai]?.trim() || '-',
+    };
+  }).filter(r => r.name);
+}
+
+function parseDate(s) {
+  if (!s || s === '-' || s === '－') return null;
+  const p = s.replace(/－/g, '-').split('/');
+  if (p.length === 2) return new Date(parseInt(p[0]), parseInt(p[1]) - 1, 1);
+  if (p.length === 3) return new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2]));
+  return null;
+}
+
+function getAlerts(r) {
+  const a = [];
+  if (r.qty < 0) a.push({ cls: 'b-red', txt: 'マイナス在庫' });
+  if (r.keika && r.keika !== '-' && r.keika !== '－') {
+    const d = parseDate(r.keika);
+    if (d && d <= TODAY) a.push({ cls: 'b-red', txt: '経過措置切れ' });
+    else if (d) a.push({ cls: 'b-amber', txt: '経過措置あり' });
+  }
+  if (r.hanbai && r.hanbai !== '-' && r.hanbai !== '－') a.push({ cls: 'b-amber', txt: '発売中止' });
+  if (r.exp && r.exp !== '-' && r.exp !== '－') {
+    const d = parseDate(r.exp);
+    if (d) {
+      const months = (d - TODAY) / (1000 * 60 * 60 * 24 * 30);
+      if (months >= 0 && months <= 12) a.push({ cls: 'b-amber', txt: '期限1年以内' });
+    }
+  }
+  return a;
+}
+
+function getFlags(r) {
+  const f = [];
+  if (r.maku) f.push('麻薬');
+  if (r.kaku) f.push('覚醒剤');
+  if (r.doku) f.push('毒薬');
+  if (r.geki) f.push('劇薬');
+  if (r.muko) f.push('向精神薬');
+  return f;
+}
+
+function isSpecial(r) { return r.maku || r.kaku || r.doku || r.geki || r.muko; }
+
+function go() { pgn = 0; render(); }
+function changePage(d) { pgn += d; render(); }
+
+function render() {
+  const q = document.getElementById('q').value.toLowerCase();
+  const cat = document.getElementById('cat').value;
+  const brd = document.getElementById('brd').value;
+  const alt = document.getElementById('alt').value;
+  const srt = document.getElementById('srt').value;
+
+  cur = DATA.filter(r => {
+    if (q && !r.name.toLowerCase().includes(q) && !r.code.includes(q)) return false;
+    if (cat && r.cat !== cat) return false;
+    if (brd && r.brand !== brd) return false;
+    if (alt === 'neg' && r.qty >= 0) return false;
+    if (alt === 'kei' && (!r.keika || r.keika === '-' || r.keika === '－')) return false;
+    if (alt === 'dis' && (!r.hanbai || r.hanbai === '-' || r.hanbai === '－')) return false;
+    if (alt === 'exp') {
+      const d = parseDate(r.exp);
+      if (!d) return false;
+      const m = (d - TODAY) / (1000 * 60 * 60 * 24 * 30);
+      if (m < 0 || m > 12) return false;
+    }
+    if (alt === 'spc' && !isSpecial(r)) return false;
+    return true;
+  });
+
+  cur.sort((a, b) => {
+    if (srt === 'stock_d') return b.stock - a.stock;
+    if (srt === 'stock_a') return a.stock - b.stock;
+    if (srt === 'months_d') return b.months - a.months;
+    if (srt === 'qty_d') return b.qty - a.qty;
+    if (srt === 'name_a') return a.name.localeCompare(b.name, 'ja');
+    return 0;
+  });
+
+  const total = cur.length;
+  const pages = Math.max(1, Math.ceil(total / PG));
+  if (pgn >= pages) pgn = pages - 1;
+  if (pgn < 0) pgn = 0;
+  const slice = cur.slice(pgn * PG, pgn * PG + PG);
+
+  // サマリー
+  const totalStock = DATA.filter(d => d.stock > 0).reduce((s, d) => s + d.stock, 0);
+  const negCnt = DATA.filter(d => d.qty < 0).length;
+  const alertCnt = DATA.filter(d => getAlerts(d).some(a => a.cls === 'b-red')).length;
+  const warnCnt = DATA.filter(d => getAlerts(d).some(a => a.cls === 'b-amber')).length;
+
+  document.getElementById('summ').innerHTML = `
+    <div class="metric"><div class="metric-label">品目数</div><div class="metric-val green">${DATA.length}</div></div>
+    <div class="metric"><div class="metric-label">在庫金額合計</div><div class="metric-val">${totalStock.toLocaleString()}円</div></div>
+    <div class="metric"><div class="metric-label">マイナス在庫</div><div class="metric-val red">${negCnt}品目</div></div>
+    <div class="metric"><div class="metric-label">要確認アラート</div><div class="metric-val amber">${alertCnt + warnCnt}品目</div></div>
+  `;
+
+  document.getElementById('countBar').textContent = `${total}件表示中（全${DATA.length}件）`;
+
+  const keikaNorm = v => (v === '－' ? '-' : v);
+
+  document.getElementById('tb').innerHTML = slice.length ? slice.map(r => {
+    const al = getAlerts(r);
+    const flags = getFlags(r);
+    const neg = r.qty < 0;
+    const kn = keikaNorm(r.keika);
+    const hn = keikaNorm(r.hanbai);
+    const kd = parseDate(kn);
+    const keikaClass = kd ? (kd <= TODAY ? 'keika-red' : 'keika-amber') : 'muted';
+    return `<tr>
+      <td class="num" style="color:var(--text3);font-size:11px">${r.code || '—'}</td>
+      <td class="name-cell" title="${r.name}">${r.name}</td>
+      <td>${r.cat}</td>
+      <td>${r.brand === '先発品' ? '先発' : r.brand === '後発品' ? '後発' : r.brand}</td>
+      <td>${flags.map(f => `<span class="badge b-blue">${f}</span>`).join('')}</td>
+      <td class="${neg ? 'neg' : 'num'}">${r.qty}</td>
+      <td class="${neg ? 'neg' : 'num'}">${r.stock.toLocaleString()}</td>
+      <td class="num">${r.rawMonths}</td>
+      <td>${r.lastRx}</td>
+      <td>${r.exp}</td>
+      <td class="${kn !== '-' ? keikaClass : 'muted'}">${kn !== '-' ? kn : '—'}</td>
+      <td class="${hn !== '-' ? 'keika-red' : 'muted'}">${hn !== '-' ? hn : '—'}</td>
+      <td>${al.map(a => `<span class="badge ${a.cls}">${a.txt}</span>`).join('')}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="13" class="empty">該当するデータがありません</td></tr>`;
+
+  document.getElementById('pi').textContent = `${pgn + 1} / ${pages} ページ`;
+  document.getElementById('prv').disabled = pgn === 0;
+  document.getElementById('nxt').disabled = pgn >= pages - 1;
+}
+</script>
+</body>
+</html>
