@@ -6,7 +6,7 @@
 <title>不動在庫管理</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
-  :root {
+  :root{
     --bg:#f5f4f0;--surface:#fff;--surface2:#f0efe9;--border:#e2e0d8;--border2:#ccc9be;
     --text:#1a1917;--text2:#6b6860;--text3:#9e9b93;
     --accent:#2d5a3d;--accent-light:#e8f2eb;
@@ -18,93 +18,93 @@
   body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;min-height:100vh}
   header{background:var(--accent);color:white;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,0.15)}
   header h1{font-size:15px;font-weight:700;letter-spacing:0.05em}
-  header .subtitle{font-size:10px;opacity:0.75;font-family:'IBM Plex Mono',monospace}
+  header .sub{font-size:10px;opacity:0.75;font-family:'IBM Plex Mono',monospace}
   .tabs{display:flex;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:52px;z-index:99}
   .tab{flex:1;padding:12px 8px;text-align:center;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s}
   .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
   .page{display:none;padding:12px 12px 80px}
   .page.active{display:block}
 
+  /* スキャン画面 */
   .scan-btn{width:100%;padding:16px;background:var(--accent);color:white;border:none;border-radius:var(--radius-lg);font-size:15px;font-family:'Noto Sans JP',sans-serif;font-weight:700;cursor:pointer;margin-bottom:14px}
   .scan-btn:active{opacity:0.8}
   .stop-btn{width:100%;padding:10px;background:transparent;color:var(--red);border:1.5px solid var(--red);border-radius:var(--radius);font-size:13px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;margin-bottom:14px;display:none}
 
-  #scanner-container{display:none;position:relative;background:#000;border-radius:var(--radius-lg);overflow:hidden;margin-bottom:14px}
-  #interactive{width:100%;max-height:280px;overflow:hidden}
-  #interactive video{width:100%;display:block;max-height:280px;object-fit:cover}
-  #interactive canvas{display:none}
-  .scan-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
-  .scan-frame{width:88%;height:68px;border:2px solid rgba(255,255,255,0.85);border-radius:4px;box-shadow:0 0 0 9999px rgba(0,0,0,0.45);position:relative}
-  .scan-line{position:absolute;left:0;right:0;height:2px;background:rgba(255,60,60,0.85);top:50%;animation:scan 1.6s ease-in-out infinite}
-  @keyframes scan{0%,100%{top:10%}50%{top:88%}}
-  .scan-hint{position:absolute;bottom:10px;left:0;right:0;text-align:center;color:rgba(255,255,255,0.85);font-size:11px}
+  #camWrap{display:none;position:relative;background:#000;border-radius:var(--radius-lg);overflow:hidden;margin-bottom:14px}
+  #camVideo{width:100%;display:block;max-height:300px;object-fit:cover}
+  #camCanvas{display:none}
+  .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+  .frame{width:90%;height:72px;border:2.5px solid rgba(255,255,255,0.9);border-radius:4px;box-shadow:0 0 0 9999px rgba(0,0,0,0.42);position:relative}
+  .scanline{position:absolute;left:0;right:0;height:2px;background:rgba(255,50,50,0.9);animation:sl 1.8s ease-in-out infinite}
+  @keyframes sl{0%,100%{top:8%}50%{top:86%}}
+  .cam-hint{position:absolute;bottom:10px;left:0;right:0;text-align:center;color:rgba(255,255,255,0.9);font-size:11px;text-shadow:0 1px 3px rgba(0,0,0,0.6)}
+
+  .status-bar{background:var(--surface2);border-radius:var(--radius);padding:8px 12px;font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--text2);margin-bottom:10px;min-height:32px}
 
   .result-card{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);padding:16px;box-shadow:var(--shadow);margin-bottom:12px}
   .result-card.ok{border-left:4px solid var(--accent)}
   .result-card.warn{border-left:4px solid var(--amber)}
   .result-card.danger{border-left:4px solid var(--red)}
   .result-card.unknown{border-left:4px solid var(--border2)}
-  .result-title{font-size:10px;color:var(--text3);font-family:'IBM Plex Mono',monospace;margin-bottom:8px;letter-spacing:0.08em;text-transform:uppercase}
-  .result-name{font-size:15px;font-weight:700;margin-bottom:6px;line-height:1.4}
-  .result-exp{font-size:26px;font-weight:700;font-family:'IBM Plex Mono',monospace;margin:6px 0 2px}
-  .result-exp.ok{color:var(--accent)}.result-exp.warn{color:var(--amber)}.result-exp.danger{color:var(--red)}
-  .result-status{font-size:12px;color:var(--text2);margin-bottom:10px}
-  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
-  .info-item{background:var(--bg);border-radius:var(--radius);padding:8px 10px}
-  .info-label{font-size:10px;color:var(--text3);letter-spacing:0.05em;text-transform:uppercase}
-  .info-val{font-size:13px;font-weight:500;font-family:'IBM Plex Mono',monospace;margin-top:2px}
-  .raw-info{background:var(--surface2);border-radius:var(--radius);padding:8px 10px;font-size:10px;font-family:'IBM Plex Mono',monospace;color:var(--text3);margin-top:10px;word-break:break-all}
+  .rtitle{font-size:10px;color:var(--text3);font-family:'IBM Plex Mono',monospace;margin-bottom:8px;letter-spacing:0.08em;text-transform:uppercase}
+  .rname{font-size:15px;font-weight:700;margin-bottom:6px;line-height:1.4}
+  .rexp{font-size:28px;font-weight:700;font-family:'IBM Plex Mono',monospace;margin:6px 0 2px}
+  .rexp.ok{color:var(--accent)}.rexp.warn{color:var(--amber)}.rexp.danger{color:var(--red)}
+  .rstatus{font-size:12px;color:var(--text2);margin-bottom:10px}
+  .igrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+  .iitem{background:var(--bg);border-radius:var(--radius);padding:8px 10px}
+  .ilabel{font-size:10px;color:var(--text3);letter-spacing:0.05em;text-transform:uppercase}
+  .ival{font-size:13px;font-weight:500;font-family:'IBM Plex Mono',monospace;margin-top:2px}
+  .rawbox{background:var(--surface2);border-radius:var(--radius);padding:8px 10px;font-size:10px;font-family:'IBM Plex Mono',monospace;color:var(--text3);margin-top:10px;word-break:break-all}
+
   .badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:99px;font-weight:500;margin:2px}
   .b-red{background:var(--red-light);color:var(--red)}
   .b-amber{background:var(--amber-light);color:var(--amber)}
   .b-blue{background:var(--blue-light);color:var(--blue)}
 
-  .history-header{display:flex;align-items:center;justify-content:space-between;margin:4px 0 8px}
-  .history-header span{font-size:12px;font-weight:500;color:var(--text2)}
-  .clear-btn{font-size:11px;padding:4px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface);color:var(--text2);cursor:pointer}
-  .history-list{display:flex;flex-direction:column;gap:6px}
-  .history-item{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:10px 12px;display:flex;align-items:center;justify-content:space-between}
-  .history-name{font-size:12px;font-weight:500;max-width:58%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .history-time{font-size:10px;color:var(--text3);margin-top:1px}
-  .history-exp{font-size:12px;font-family:'IBM Plex Mono',monospace;font-weight:500;text-align:right}
-  .history-exp.ok{color:var(--accent)}.history-exp.warn{color:var(--amber)}.history-exp.danger{color:var(--red)}
-  .empty-msg{text-align:center;padding:24px;color:var(--text3);font-size:12px}
+  .hist-hdr{display:flex;align-items:center;justify-content:space-between;margin:4px 0 8px}
+  .hist-hdr span{font-size:12px;font-weight:500;color:var(--text2)}
+  .clrbtn{font-size:11px;padding:4px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface);color:var(--text2);cursor:pointer}
+  .hlist{display:flex;flex-direction:column;gap:6px}
+  .hitem{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:10px 12px;display:flex;align-items:center;justify-content:space-between}
+  .hname{font-size:12px;font-weight:500;max-width:58%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .htime{font-size:10px;color:var(--text3);margin-top:1px}
+  .hexp{font-size:12px;font-family:'IBM Plex Mono',monospace;font-weight:500;text-align:right}
+  .hexp.ok{color:var(--accent)}.hexp.warn{color:var(--amber)}.hexp.danger{color:var(--red)}
+  .emptymsg{text-align:center;padding:24px;color:var(--text3);font-size:12px}
 
-  .summary-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px}
-  @media(min-width:600px){.summary-grid{grid-template-columns:repeat(4,1fr)}}
+  /* 一覧 */
+  .sgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px}
+  @media(min-width:600px){.sgrid{grid-template-columns:repeat(4,1fr)}}
   .metric{background:var(--surface);border-radius:var(--radius);padding:12px;border:1px solid var(--border);box-shadow:var(--shadow)}
-  .metric-label{font-size:10px;color:var(--text3);letter-spacing:0.06em;font-weight:500;text-transform:uppercase}
-  .metric-val{font-size:20px;font-weight:700;margin-top:2px;font-family:'IBM Plex Mono',monospace}
-  .metric-val.red{color:var(--red)}.metric-val.amber{color:var(--amber)}.metric-val.green{color:var(--accent)}
+  .mlabel{font-size:10px;color:var(--text3);letter-spacing:0.06em;font-weight:500;text-transform:uppercase}
+  .mval{font-size:20px;font-weight:700;margin-top:2px;font-family:'IBM Plex Mono',monospace}
+  .mval.red{color:var(--red)}.mval.amber{color:var(--amber)}.mval.green{color:var(--accent)}
   .filters{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);padding:12px;margin-bottom:10px;display:flex;flex-wrap:wrap;gap:8px;box-shadow:var(--shadow)}
   .filters input,.filters select{font-family:'Noto Sans JP',sans-serif;font-size:12px;padding:6px 10px;height:32px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);outline:none}
   .filters input{flex:1;min-width:130px}
-  .count-bar{font-size:11px;color:var(--text3);font-family:'IBM Plex Mono',monospace;margin-bottom:6px}
-  .tbl-wrap{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);overflow-x:auto;box-shadow:var(--shadow);-webkit-overflow-scrolling:touch}
+  .cbar{font-size:11px;color:var(--text3);font-family:'IBM Plex Mono',monospace;margin-bottom:6px}
+  .twrap{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);overflow-x:auto;box-shadow:var(--shadow);-webkit-overflow-scrolling:touch}
   table{width:100%;border-collapse:collapse;font-size:12px;min-width:780px}
   thead th{background:var(--surface2);padding:8px 10px;text-align:left;font-weight:500;font-size:10px;color:var(--text2);border-bottom:1px solid var(--border);white-space:nowrap;letter-spacing:0.04em}
   tbody td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle;white-space:nowrap}
   tbody tr:last-child td{border-bottom:none}
   tbody tr:hover td{background:var(--surface2)}
-  .name-cell{max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ncell{max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .neg{color:var(--red);font-weight:700;font-family:'IBM Plex Mono',monospace}
   .num{font-family:'IBM Plex Mono',monospace}
-  .muted{color:var(--text3)}.keika-red{color:var(--red);font-weight:500}.keika-amber{color:var(--amber);font-weight:500}
+  .muted{color:var(--text3)}.kr{color:var(--red);font-weight:500}.ka{color:var(--amber);font-weight:500}
   .pager{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:14px;font-size:12px;color:var(--text2)}
   .pager button{font-family:'Noto Sans JP',sans-serif;font-size:12px;padding:6px 14px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--surface);color:var(--text);cursor:pointer}
   .pager button:disabled{opacity:0.35;cursor:default}
   .empty{text-align:center;padding:40px;color:var(--text3);font-size:13px}
-  .fab-filter{display:none;position:fixed;bottom:20px;right:20px;background:var(--accent);color:white;border:none;border-radius:50px;padding:12px 20px;font-size:13px;font-family:'Noto Sans JP',sans-serif;font-weight:500;cursor:pointer;box-shadow:0 4px 16px rgba(45,90,61,0.35);z-index:200}
-  @media(max-width:599px){.fab-filter{display:block}.filters{display:none}.filters.open{display:flex}}
+  .fab{display:none;position:fixed;bottom:20px;right:20px;background:var(--accent);color:white;border:none;border-radius:50px;padding:12px 20px;font-size:13px;font-family:'Noto Sans JP',sans-serif;font-weight:500;cursor:pointer;box-shadow:0 4px 16px rgba(45,90,61,0.35);z-index:200}
+  @media(max-width:599px){.fab{display:block}.filters{display:none}.filters.open{display:flex}}
 </style>
 </head>
 <body>
-
 <header>
-  <div>
-    <div class="subtitle">PHARMACY</div>
-    <h1>不動在庫管理システム</h1>
-  </div>
+  <div><div class="sub">PHARMACY</div><h1>不動在庫管理システム</h1></div>
   <div style="font-size:10px;opacity:0.7;font-family:'IBM Plex Mono',monospace;text-align:right">更新日<br>2026/03/23</div>
 </header>
 
@@ -115,26 +115,26 @@
 
 <div class="page active" id="page-scan">
   <button class="scan-btn" id="startBtn" onclick="startScan()">📷 バーコードをスキャン</button>
-  <div id="scanner-container">
-    <div id="interactive" class="viewport"></div>
-    <div class="scan-overlay">
-      <div class="scan-frame"><div class="scan-line"></div></div>
+  <div id="camWrap">
+    <video id="camVideo" autoplay muted playsinline></video>
+    <canvas id="camCanvas"></canvas>
+    <div class="overlay">
+      <div class="frame"><div class="scanline"></div></div>
     </div>
-    <div class="scan-hint">バーコードを横向きに枠内へ合わせてください</div>
+    <div class="cam-hint">バーコードを枠の中に横向きで合わせてください</div>
   </div>
   <button class="stop-btn" id="stopBtn" onclick="stopScan()">■ スキャンを停止</button>
+  <div class="status-bar" id="statusBar">スキャンボタンを押してください</div>
   <div id="resultArea"></div>
-  <div class="history-header">
+  <div class="hist-hdr">
     <span>スキャン履歴</span>
-    <button class="clear-btn" onclick="clearHistory()">クリア</button>
+    <button class="clrbtn" onclick="clearHist()">クリア</button>
   </div>
-  <div class="history-list" id="historyList">
-    <div class="empty-msg">スキャン履歴はありません</div>
-  </div>
+  <div class="hlist" id="histList"><div class="emptymsg">スキャン履歴はありません</div></div>
 </div>
 
 <div class="page" id="page-list">
-  <div class="summary-grid" id="summ"></div>
+  <div class="sgrid" id="summ"></div>
   <div class="filters" id="filters">
     <input type="search" id="q" placeholder="品名・コードで検索…" oninput="go()">
     <select id="cat" onchange="go()"><option value="">全区分</option><option>内服薬</option><option>外用薬</option><option>注射薬</option></select>
@@ -149,8 +149,8 @@
       <option value="months_d">不動月数↓</option><option value="qty_d">数量↓</option><option value="name_a">品名↑</option>
     </select>
   </div>
-  <div class="count-bar" id="countBar"></div>
-  <div class="tbl-wrap">
+  <div class="cbar" id="cbar"></div>
+  <div class="twrap">
     <table>
       <thead><tr>
         <th>コード</th><th>品名</th><th>区分</th><th>先/後</th><th>規制</th>
@@ -161,224 +161,237 @@
     </table>
   </div>
   <div class="pager">
-    <button id="prv" onclick="changePage(-1)">← 前へ</button>
+    <button id="prv" onclick="chgPage(-1)">← 前へ</button>
     <span id="pi"></span>
-    <button id="nxt" onclick="changePage(1)">次へ →</button>
+    <button id="nxt" onclick="chgPage(1)">次へ →</button>
   </div>
 </div>
 
-<button class="fab-filter" onclick="document.getElementById('filters').classList.toggle('open')">☰ フィルター</button>
+<button class="fab" onclick="document.getElementById('filters').classList.toggle('open')">☰ フィルター</button>
 
-<script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
 <script>
 const TODAY = new Date('2026-03-23');
 const DATA = [
-  {code:'217128',name:'ラシックス錠４０ｍｇ',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:119,stock:1095,rawMonths:'6(203)',lastRx:'2025/09/01',exp:'2027/04',keika:'-',hanbai:'-'},
-  {code:'220980',name:'プロ・バンサイン錠１５ｍｇ',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:126,stock:684,rawMonths:'6(201)',lastRx:'2025/09/03',exp:'2028/02',keika:'-',hanbai:'-'},
-  {code:'225075',name:'グリクラジド錠４０ｍｇ「サワイ」',cat:'内服薬',brand:'後発品',geki:true,doku:false,muko:false,qty:32,stock:175,rawMonths:'6(201)',lastRx:'2025/09/03',exp:'-',keika:'2026/03/31',hanbai:'2025/05/01'},
-  {code:'226631',name:'トラマールＯＤ錠２５ｍｇ',cat:'内服薬',brand:'先発品',geki:true,doku:false,muko:false,qty:148,stock:1931,rawMonths:'6(198)',lastRx:'2025/09/06',exp:'2027/10',keika:'-',hanbai:'-'},
-  {code:'406070',name:'リドメックスコーワ軟膏０．３％',cat:'外用薬',brand:'先発品',geki:false,doku:false,muko:false,qty:90,stock:1177,rawMonths:'6(198)',lastRx:'2025/09/06',exp:'2029/03',keika:'-',hanbai:'-'},
-  {code:'220298',name:'ポリフル細粒８３．３％',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:193,stock:2469,rawMonths:'6(196)',lastRx:'2025/09/08',exp:'-',keika:'-',hanbai:'-'},
-  {code:'227884',name:'ペンタサ顆粒９４％',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:190.8,stock:15359,rawMonths:'6(194)',lastRx:'2025/09/10',exp:'2027/07',keika:'-',hanbai:'-'},
-  {code:'406105',name:'スタデルム軟膏５％',cat:'外用薬',brand:'先発品',geki:false,doku:false,muko:false,qty:90,stock:889,rawMonths:'6(194)',lastRx:'2025/09/10',exp:'2029/04',keika:'-',hanbai:'-'},
-  {code:'226660',name:'エチゾラム錠０．２５ｍｇ「ＳＷ」',cat:'内服薬',brand:'後発品',geki:false,doku:false,muko:true,qty:165,stock:848,rawMonths:'6(192)',lastRx:'2025/09/12',exp:'2028/03',keika:'-',hanbai:'-'},
-  {code:'232146',name:'バルヒディオ配合錠ＥＸ「ＮＩＧ」',cat:'内服薬',brand:'後発品',geki:false,doku:false,muko:false,qty:76,stock:1300,rawMonths:'6(192)',lastRx:'2025/09/12',exp:'2027/12',keika:'-',hanbai:'2026/01/31'},
-  {code:'403562',name:'スチックゼノールＡ',cat:'外用薬',brand:'先発品',geki:false,doku:false,muko:false,qty:200,stock:0,rawMonths:'6(192)',lastRx:'2025/09/12',exp:'-',keika:'-',hanbai:'-'},
-  {code:'221476',name:'クラビット錠５００ｍｇ',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:17,stock:2266,rawMonths:'6(187)',lastRx:'2025/09/17',exp:'-',keika:'-',hanbai:'-'},
-  {code:'203491',name:'コンスタン０．４ｍｇ錠',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:true,qty:-75,stock:-365,rawMonths:'6(185)',lastRx:'2025/09/19',exp:'-',keika:'-',hanbai:'-'},
-  {code:'229498',name:'カルシトリオールカプセル０．５μｇ「トーワ」',cat:'内服薬',brand:'後発品',geki:true,doku:false,muko:false,qty:-60,stock:0,rawMonths:'6(185)',lastRx:'2025/09/19',exp:'-',keika:'2025/03/31',hanbai:'-'},
-  {code:'220105',name:'ボルタレン錠２５ｍｇ',cat:'内服薬',brand:'先発品',geki:true,doku:false,muko:false,qty:110,stock:607,rawMonths:'6(184)',lastRx:'2025/09/20',exp:'2027/08',keika:'-',hanbai:'-'},
-  {code:'226197',name:'ビソプロロールフマル酸塩錠０．６２５ｍｇ「トーワ」',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:-180,stock:-1526,rawMonths:'6(184)',lastRx:'2025/09/20',exp:'-',keika:'-',hanbai:'-'},
-  {code:'231838',name:'ミネブロＯＤ錠１．２５ｍｇ',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:-30,stock:-1259,rawMonths:'6(184)',lastRx:'2025/09/20',exp:'-',keika:'-',hanbai:'-'},
-  {code:'222287',name:'サルポグレラート塩酸塩錠１００ｍｇ「サワイ」',cat:'内服薬',brand:'後発品',geki:false,doku:false,muko:false,qty:215,stock:6682,rawMonths:'6(182)',lastRx:'2025/09/22',exp:'2027/08',keika:'-',hanbai:'-'},
-  {code:'406853',name:'ベピオゲル２．５％',cat:'外用薬',brand:'先発品',geki:false,doku:false,muko:false,qty:135,stock:9969,rawMonths:'6(180)',lastRx:'2025/09/24',exp:'2027/03',keika:'-',hanbai:'-'},
-  {code:'211028',name:'トリプタノール錠１０',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:107.5,stock:897,rawMonths:'6(179)',lastRx:'2025/09/25',exp:'2027/10',keika:'-',hanbai:'-'},
-  {code:'219558',name:'０１７クラシエ五苓散料エキス錠',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:1203,stock:6636,rawMonths:'6(179)',lastRx:'2025/09/25',exp:'2028/08',keika:'-',hanbai:'-'},
-  {code:'231265',name:'クレンブテロール錠１０μｇ「ハラサワ」',cat:'内服薬',brand:'後発品',geki:false,doku:false,muko:false,qty:100,stock:512,rawMonths:'6(177)',lastRx:'2025/09/27',exp:'2028/02',keika:'-',hanbai:'-'},
-  {code:'200316',name:'アデホスコーワ腸溶錠２０　２０ｍｇ',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:58,stock:285,rawMonths:'6(175)',lastRx:'2025/09/29',exp:'2028/02',keika:'-',hanbai:'-'},
-  {code:'207429',name:'ビオフェルミンＲ錠',cat:'内服薬',brand:'後発品',geki:false,doku:false,muko:false,qty:72,stock:352,rawMonths:'6(175)',lastRx:'2025/09/29',exp:'2028/08',keika:'-',hanbai:'-'},
-  {code:'210483',name:'レキソタン錠５　５ｍｇ',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:true,qty:94,stock:526,rawMonths:'6(175)',lastRx:'2025/09/29',exp:'2029/12',keika:'-',hanbai:'-'},
-  {code:'218830',name:'ベプリコール錠５０ｍｇ',cat:'内服薬',brand:'先発品',geki:true,doku:false,muko:false,qty:165,stock:0,rawMonths:'-',lastRx:'-',exp:'-',keika:'-',hanbai:'-'},
-  {code:'225265',name:'イルトラ配合錠ＨＤ',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:56,stock:0,rawMonths:'-',lastRx:'-',exp:'-',keika:'-',hanbai:'-'},
-  {code:'226152',name:'タケルダ配合錠',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:40,stock:588,rawMonths:'-',lastRx:'-',exp:'2027/09',keika:'-',hanbai:'-'},
-  {code:'228308',name:'ロサルヒド配合錠ＨＤ「サワイ」',cat:'内服薬',brand:'後発品',geki:false,doku:false,muko:false,qty:200,stock:4762,rawMonths:'-',lastRx:'-',exp:'2028/09',keika:'-',hanbai:'-'},
-  {code:'228692',name:'テルチア配合錠ＡＰ「サワイ」',cat:'内服薬',brand:'後発品',geki:false,doku:false,muko:false,qty:115,stock:0,rawMonths:'-',lastRx:'-',exp:'-',keika:'-',hanbai:'-'},
-  {code:'407876',name:'エフィナコナゾール爪外用液１０％「科研」',cat:'外用薬',brand:'後発品',geki:false,doku:false,muko:false,qty:17.8,stock:10894,rawMonths:'-',lastRx:'-',exp:'2028/02',keika:'-',hanbai:'-'},
+  {code:'217128',name:'ラシックス錠４０ｍｇ',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:119,stock:1095,rawM:'6(203)',lastRx:'2025/09/01',exp:'2027/04',keika:'-',hanbai:'-'},
+  {code:'220980',name:'プロ・バンサイン錠１５ｍｇ',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:126,stock:684,rawM:'6(201)',lastRx:'2025/09/03',exp:'2028/02',keika:'-',hanbai:'-'},
+  {code:'225075',name:'グリクラジド錠４０ｍｇ「サワイ」',cat:'内服薬',brand:'後発品',geki:true,doku:false,muko:false,qty:32,stock:175,rawM:'6(201)',lastRx:'2025/09/03',exp:'-',keika:'2026/03/31',hanbai:'2025/05/01'},
+  {code:'226631',name:'トラマールＯＤ錠２５ｍｇ',cat:'内服薬',brand:'先発品',geki:true,doku:false,muko:false,qty:148,stock:1931,rawM:'6(198)',lastRx:'2025/09/06',exp:'2027/10',keika:'-',hanbai:'-'},
+  {code:'406070',name:'リドメックスコーワ軟膏０．３％',cat:'外用薬',brand:'先発品',geki:false,doku:false,muko:false,qty:90,stock:1177,rawM:'6(198)',lastRx:'2025/09/06',exp:'2029/03',keika:'-',hanbai:'-'},
+  {code:'220298',name:'ポリフル細粒８３．３％',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:193,stock:2469,rawM:'6(196)',lastRx:'2025/09/08',exp:'-',keika:'-',hanbai:'-'},
+  {code:'227884',name:'ペンタサ顆粒９４％',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:190.8,stock:15359,rawM:'6(194)',lastRx:'2025/09/10',exp:'2027/07',keika:'-',hanbai:'-'},
+  {code:'406105',name:'スタデルム軟膏５％',cat:'外用薬',brand:'先発品',geki:false,doku:false,muko:false,qty:90,stock:889,rawM:'6(194)',lastRx:'2025/09/10',exp:'2029/04',keika:'-',hanbai:'-'},
+  {code:'226660',name:'エチゾラム錠０．２５ｍｇ「ＳＷ」',cat:'内服薬',brand:'後発品',geki:false,doku:false,muko:true,qty:165,stock:848,rawM:'6(192)',lastRx:'2025/09/12',exp:'2028/03',keika:'-',hanbai:'-'},
+  {code:'232146',name:'バルヒディオ配合錠ＥＸ「ＮＩＧ」',cat:'内服薬',brand:'後発品',geki:false,doku:false,muko:false,qty:76,stock:1300,rawM:'6(192)',lastRx:'2025/09/12',exp:'2027/12',keika:'-',hanbai:'2026/01/31'},
+  {code:'221476',name:'クラビット錠５００ｍｇ',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:17,stock:2266,rawM:'6(187)',lastRx:'2025/09/17',exp:'-',keika:'-',hanbai:'-'},
+  {code:'203491',name:'コンスタン０．４ｍｇ錠',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:true,qty:-75,stock:-365,rawM:'6(185)',lastRx:'2025/09/19',exp:'-',keika:'-',hanbai:'-'},
+  {code:'220105',name:'ボルタレン錠２５ｍｇ',cat:'内服薬',brand:'先発品',geki:true,doku:false,muko:false,qty:110,stock:607,rawM:'6(184)',lastRx:'2025/09/20',exp:'2027/08',keika:'-',hanbai:'-'},
+  {code:'226197',name:'ビソプロロールフマル酸塩錠０．６２５ｍｇ「トーワ」',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:-180,stock:-1526,rawM:'6(184)',lastRx:'2025/09/20',exp:'-',keika:'-',hanbai:'-'},
+  {code:'222287',name:'サルポグレラート塩酸塩錠１００ｍｇ「サワイ」',cat:'内服薬',brand:'後発品',geki:false,doku:false,muko:false,qty:215,stock:6682,rawM:'6(182)',lastRx:'2025/09/22',exp:'2027/08',keika:'-',hanbai:'-'},
+  {code:'406853',name:'ベピオゲル２．５％',cat:'外用薬',brand:'先発品',geki:false,doku:false,muko:false,qty:135,stock:9969,rawM:'6(180)',lastRx:'2025/09/24',exp:'2027/03',keika:'-',hanbai:'-'},
+  {code:'211028',name:'トリプタノール錠１０',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:107.5,stock:897,rawM:'6(179)',lastRx:'2025/09/25',exp:'2027/10',keika:'-',hanbai:'-'},
+  {code:'219558',name:'０１７クラシエ五苓散料エキス錠',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:1203,stock:6636,rawM:'6(179)',lastRx:'2025/09/25',exp:'2028/08',keika:'-',hanbai:'-'},
+  {code:'210483',name:'レキソタン錠５　５ｍｇ',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:true,qty:94,stock:526,rawM:'6(175)',lastRx:'2025/09/29',exp:'2029/12',keika:'-',hanbai:'-'},
+  {code:'218830',name:'ベプリコール錠５０ｍｇ',cat:'内服薬',brand:'先発品',geki:true,doku:false,muko:false,qty:165,stock:0,rawM:'-',lastRx:'-',exp:'-',keika:'-',hanbai:'-'},
+  {code:'226152',name:'タケルダ配合錠',cat:'内服薬',brand:'先発品',geki:false,doku:false,muko:false,qty:40,stock:588,rawM:'-',lastRx:'-',exp:'2027/09',keika:'-',hanbai:'-'},
+  {code:'228308',name:'ロサルヒド配合錠ＨＤ「サワイ」',cat:'内服薬',brand:'後発品',geki:false,doku:false,muko:false,qty:200,stock:4762,rawM:'-',lastRx:'-',exp:'2028/09',keika:'-',hanbai:'-'},
+  {code:'407876',name:'エフィナコナゾール爪外用液１０％「科研」',cat:'外用薬',brand:'後発品',geki:false,doku:false,muko:false,qty:17.8,stock:10894,rawM:'-',lastRx:'-',exp:'2028/02',keika:'-',hanbai:'-'},
 ];
 
-function switchTab(tab) {
-  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',(tab==='scan'&&i===0)||(tab==='list'&&i===1)));
+// ===== タブ =====
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',(t==='scan'&&i===0)||(t==='list'&&i===1)));
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.getElementById('page-'+tab).classList.add('active');
-  if(tab==='list') renderList();
+  document.getElementById('page-'+t).classList.add('active');
+  if(t==='list') renderList();
 }
 
-let scanning=false, scanHistory=[], lastCode='', lastTime=0;
+// ===== スキャン（BarcodeDetector API） =====
+let stream=null, scanTimer=null, scanning=false, history=[], lastCode='', lastTime=0;
 
-function parseGS1(raw) {
-  const result={gtin:null,exp:null,expStr:null,lot:null,raw};
+function setStatus(msg){document.getElementById('statusBar').textContent=msg;}
+
+async function startScan(){
+  // BarcodeDetector 対応チェック
+  if(!('BarcodeDetector' in window)){
+    setStatus('⚠️ このブラウザはBarcodeDetector非対応です。Chrome最新版に更新してください。');
+    return;
+  }
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:'environment', width:{ideal:1920}, height:{ideal:1080}}
+    });
+  } catch(e){
+    setStatus('❌ カメラの許可が必要です。アドレスバー横のカメラアイコンをタップして許可してください。');
+    return;
+  }
+
+  const video = document.getElementById('camVideo');
+  video.srcObject = stream;
+  await video.play();
+
+  document.getElementById('startBtn').style.display='none';
+  document.getElementById('camWrap').style.display='block';
+  document.getElementById('stopBtn').style.display='block';
+  scanning = true;
+  setStatus('📷 スキャン中… バーコードを枠内に合わせてください');
+
+  const detector = new BarcodeDetector({
+    formats:['code_128','ean_13','ean_8','upc_a','upc_e','data_matrix','pdf417']
+  });
+
+  const canvas = document.getElementById('camCanvas');
+  const ctx = canvas.getContext('2d');
+
+  async function detect(){
+    if(!scanning) return;
+    if(video.readyState === video.HAVE_ENOUGH_DATA){
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
+      try{
+        const codes = await detector.detect(canvas);
+        if(codes.length > 0){
+          const raw = codes[0].rawValue;
+          const now = Date.now();
+          if(raw !== lastCode || now - lastTime > 3000){
+            lastCode = raw; lastTime = now;
+            onDetected(raw);
+          }
+        }
+      } catch(e){}
+    }
+    scanTimer = setTimeout(detect, 300);
+  }
+  detect();
+}
+
+function stopScan(){
+  scanning = false;
+  clearTimeout(scanTimer);
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+  document.getElementById('camWrap').style.display='none';
+  document.getElementById('startBtn').style.display='block';
+  document.getElementById('stopBtn').style.display='none';
+  setStatus('スキャンを停止しました');
+}
+
+function parseGS1(raw){
+  const r={gtin:null,exp:null,expStr:null,lot:null,raw};
   let s=raw.replace(/[\u001d\u001c\u00e8]/g,'|');
   let m=s.match(/(?:^|\|?)01(\d{14})/);
-  if(m) result.gtin=m[1];
+  if(m) r.gtin=m[1];
   m=s.match(/(?:^|\|?)17(\d{6})/);
   if(m){
     const yy=parseInt(m[1].slice(0,2)),mm=parseInt(m[1].slice(2,4)),dd=parseInt(m[1].slice(4,6));
     const yyyy=yy+(yy<50?2000:1900);
     const day=dd===0?new Date(yyyy,mm,0).getDate():dd;
-    result.exp=new Date(yyyy,mm-1,day);
-    result.expStr=`${yyyy}/${String(mm).padStart(2,'0')}/${String(day).padStart(2,'0')}`;
+    r.exp=new Date(yyyy,mm-1,day);
+    r.expStr=`${yyyy}/${String(mm).padStart(2,'0')}/${String(day).padStart(2,'0')}`;
   }
+  // EAN/JANのみの場合、年月が埋め込まれていないので expなし
   m=s.match(/(?:^|\|?)10([^\|]{1,20})/);
-  if(m) result.lot=m[1];
-  return result;
+  if(m) r.lot=m[1];
+  return r;
 }
 
-function findDrug(parsed) {
+function findDrug(parsed){
   if(!parsed.gtin) return null;
   return DATA.find(d=>d.code&&parsed.gtin.includes(d.code));
 }
 
-function expStatus(expDate) {
-  if(!expDate) return{cls:'',label:'有効期限情報なし'};
-  const diff=(expDate-TODAY)/(1000*60*60*24);
+function expStatus(d){
+  if(!d) return{cls:'',label:'有効期限情報なし'};
+  const diff=(d-TODAY)/(1000*60*60*24);
   if(diff<0) return{cls:'danger',label:`期限切れ（${Math.abs(Math.floor(diff))}日経過）`};
   if(diff<=90) return{cls:'danger',label:`残り${Math.floor(diff)}日 ⚠️`};
   if(diff<=365) return{cls:'warn',label:`残り約${Math.floor(diff/30)}ヶ月`};
   return{cls:'ok',label:`残り約${Math.floor(diff/365)}年${Math.floor((diff%365)/30)}ヶ月`};
 }
 
-function getAlerts(r){
+function drugAlerts(r){
   const a=[];
   if(r.qty<0) a.push({cls:'b-red',txt:'マイナス在庫'});
-  if(r.keika&&r.keika!=='-'){const d=parseDate(r.keika);if(d&&d<=TODAY)a.push({cls:'b-red',txt:'経過措置切れ'});else if(d)a.push({cls:'b-amber',txt:'経過措置あり'});}
+  if(r.keika&&r.keika!=='-'){const d=pd(r.keika);if(d&&d<=TODAY)a.push({cls:'b-red',txt:'経過措置切れ'});else if(d)a.push({cls:'b-amber',txt:'経過措置あり'});}
   if(r.hanbai&&r.hanbai!=='-') a.push({cls:'b-amber',txt:'発売中止'});
   return a;
 }
 
-function onDetected(code) {
-  const now=Date.now();
-  if(code===lastCode&&now-lastTime<3000) return;
-  lastCode=code; lastTime=now;
-  const parsed=parseGS1(code);
+function onDetected(raw){
+  const parsed=parseGS1(raw);
   const drug=findDrug(parsed);
   const st=expStatus(parsed.exp);
-  const cardCls=parsed.exp?st.cls:'unknown';
-  const timeStr=new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
+  const cls=parsed.exp?st.cls:'unknown';
+  const time=new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
 
-  let html=`<div class="result-card ${cardCls}">`;
-  html+=`<div class="result-title">スキャン結果</div>`;
-  html+=`<div class="result-name">${drug?drug.name:'在庫リストに一致する薬品なし'}</div>`;
+  setStatus(`✅ 読み取り成功：${raw.slice(0,40)}${raw.length>40?'…':''}`);
+
+  let html=`<div class="result-card ${cls}">`;
+  html+=`<div class="rtitle">スキャン結果</div>`;
+  html+=`<div class="rname">${drug?drug.name:'在庫リストに一致する薬品なし'}</div>`;
   if(parsed.exp){
-    html+=`<div class="result-exp ${st.cls}">${parsed.expStr}</div>`;
-    html+=`<div class="result-status">${st.label}</div>`;
+    html+=`<div class="rexp ${st.cls}">${parsed.expStr}</div>`;
+    html+=`<div class="rstatus">${st.label}</div>`;
   } else {
-    html+=`<div style="font-size:13px;color:var(--text2);margin:8px 0">有効期限情報が含まれていません<br><small>GS1-128（医薬品用）バーコードをお試しください</small></div>`;
+    html+=`<div style="font-size:13px;color:var(--text2);margin:8px 0">有効期限情報なし（GS1-128以外の可能性があります）</div>`;
   }
   if(drug){
-    const al=getAlerts(drug);
-    html+=`<div class="info-grid">
-      <div class="info-item"><div class="info-label">在庫金額</div><div class="info-val">${drug.stock.toLocaleString()}円</div></div>
-      <div class="info-item"><div class="info-label">数量</div><div class="info-val ${drug.qty<0?'neg':''}">${drug.qty}</div></div>
-      <div class="info-item"><div class="info-label">不動月数</div><div class="info-val">${drug.rawMonths}</div></div>
-      <div class="info-item"><div class="info-label">最終処方日</div><div class="info-val">${drug.lastRx}</div></div>
+    const al=drugAlerts(drug);
+    html+=`<div class="igrid">
+      <div class="iitem"><div class="ilabel">在庫金額</div><div class="ival">${drug.stock.toLocaleString()}円</div></div>
+      <div class="iitem"><div class="ilabel">数量</div><div class="ival ${drug.qty<0?'neg':''}">${drug.qty}</div></div>
+      <div class="iitem"><div class="ilabel">不動月数</div><div class="ival">${drug.rawM}</div></div>
+      <div class="iitem"><div class="ilabel">最終処方日</div><div class="ival">${drug.lastRx}</div></div>
     </div>`;
     if(al.length) html+=`<div style="margin-top:8px">${al.map(a=>`<span class="badge ${a.cls}">${a.txt}</span>`).join('')}</div>`;
   }
-  if(parsed.lot) html+=`<div class="raw-info">ロット：${parsed.lot}</div>`;
-  html+=`<div class="raw-info">RAW: ${code.slice(0,70)}${code.length>70?'…':''}</div>`;
+  if(parsed.lot) html+=`<div class="rawbox">ロット：${parsed.lot}</div>`;
+  html+=`<div class="rawbox">RAW: ${raw.slice(0,80)}${raw.length>80?'…':''}</div>`;
   html+=`</div>`;
   document.getElementById('resultArea').innerHTML=html;
 
-  scanHistory.unshift({name:drug?drug.name:'不明（リスト外）',expStr:parsed.expStr||'—',status:st,time:timeStr});
-  if(scanHistory.length>20) scanHistory.pop();
-  renderHistory();
+  history.unshift({name:drug?drug.name:'不明',expStr:parsed.expStr||'—',st,time});
+  if(history.length>20) history.pop();
+  renderHist();
 }
 
-function startScan(){
-  document.getElementById('startBtn').style.display='none';
-  document.getElementById('scanner-container').style.display='block';
-  document.getElementById('stopBtn').style.display='block';
-  scanning=true;
-
-  Quagga.init({
-    inputStream:{
-      name:'Live',
-      type:'LiveStream',
-      target:document.querySelector('#interactive'),
-      constraints:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}},
-    },
-    decoder:{
-      readers:['code_128_reader','ean_reader','ean_8_reader','upc_reader'],
-      multiple:false,
-    },
-    locate:true,
-    numOfWorkers:2,
-    frequency:10,
-  }, function(err){
-    if(err){
-      stopScan();
-      document.getElementById('resultArea').innerHTML=`<div class="result-card unknown"><div class="result-title">エラー</div><div style="font-size:13px;color:var(--text2)">カメラへのアクセスが許可されていません。<br>ブラウザのアドレスバー横のカメラアイコンをタップして許可してください。</div></div>`;
-      return;
-    }
-    Quagga.start();
-  });
-
-  Quagga.onDetected(function(result){
-    if(!scanning) return;
-    onDetected(result.codeResult.code);
-  });
-}
-
-function stopScan(){
-  scanning=false;
-  try{Quagga.stop();}catch(e){}
-  document.getElementById('scanner-container').style.display='none';
-  document.getElementById('startBtn').style.display='block';
-  document.getElementById('stopBtn').style.display='none';
-}
-
-function renderHistory(){
-  const el=document.getElementById('historyList');
-  if(!scanHistory.length){el.innerHTML='<div class="empty-msg">スキャン履歴はありません</div>';return;}
-  el.innerHTML=scanHistory.map(h=>`
-    <div class="history-item">
-      <div><div class="history-name">${h.name}</div><div class="history-time">${h.time}</div></div>
-      <div class="history-exp ${h.status.cls}">${h.expStr}</div>
+function renderHist(){
+  const el=document.getElementById('histList');
+  if(!history.length){el.innerHTML='<div class="emptymsg">スキャン履歴はありません</div>';return;}
+  el.innerHTML=history.map(h=>`
+    <div class="hitem">
+      <div><div class="hname">${h.name}</div><div class="htime">${h.time}</div></div>
+      <div class="hexp ${h.st.cls}">${h.expStr}</div>
     </div>`).join('');
 }
+function clearHist(){history=[];lastCode='';renderHist();}
 
-function clearHistory(){scanHistory=[];lastCode='';renderHistory();}
-
+// ===== 一覧 =====
 let cur=[],pgn=0;
 const PG=25;
 
-function parseDate(s){
+function pd(s){
   if(!s||s==='-'||s==='－') return null;
   const p=s.replace(/－/g,'-').split('/');
   if(p.length===2) return new Date(parseInt(p[0]),parseInt(p[1])-1,1);
   if(p.length===3) return new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));
   return null;
 }
-
-function getAlertsForList(r){
+function listAlerts(r){
   const a=[];
   if(r.qty<0) a.push({cls:'b-red',txt:'マイナス在庫'});
-  if(r.keika&&r.keika!=='-'){const d=parseDate(r.keika);if(d&&d<=TODAY)a.push({cls:'b-red',txt:'経過措置切れ'});else if(d)a.push({cls:'b-amber',txt:'経過措置あり'});}
+  if(r.keika&&r.keika!=='-'){const d=pd(r.keika);if(d&&d<=TODAY)a.push({cls:'b-red',txt:'経過措置切れ'});else if(d)a.push({cls:'b-amber',txt:'経過措置あり'});}
   if(r.hanbai&&r.hanbai!=='-') a.push({cls:'b-amber',txt:'発売中止'});
-  if(r.exp&&r.exp!=='-'){const d=parseDate(r.exp);if(d){const m=(d-TODAY)/(1000*60*60*24*30);if(m>=0&&m<=12)a.push({cls:'b-amber',txt:'期限1年以内'});}}
+  if(r.exp&&r.exp!=='-'){const d=pd(r.exp);if(d){const m=(d-TODAY)/(1000*60*60*24*30);if(m>=0&&m<=12)a.push({cls:'b-amber',txt:'期限1年以内'});}}
   return a;
 }
-
 function go(){pgn=0;renderList();}
-function changePage(d){pgn+=d;renderList();}
-
+function chgPage(d){pgn+=d;renderList();}
 function renderList(){
   const q=document.getElementById('q').value.toLowerCase();
   const cat=document.getElementById('cat').value;
   const brd=document.getElementById('brd').value;
   const alt=document.getElementById('alt').value;
   const srt=document.getElementById('srt').value;
-
   cur=DATA.filter(r=>{
     if(q&&!r.name.toLowerCase().includes(q)&&!r.code.includes(q)) return false;
     if(cat&&r.cat!==cat) return false;
@@ -386,62 +399,56 @@ function renderList(){
     if(alt==='neg'&&r.qty>=0) return false;
     if(alt==='kei'&&(!r.keika||r.keika==='-')) return false;
     if(alt==='dis'&&(!r.hanbai||r.hanbai==='-')) return false;
-    if(alt==='exp'){const d=parseDate(r.exp);if(!d)return false;const m=(d-TODAY)/(1000*60*60*24*30);if(m<0||m>12)return false;}
+    if(alt==='exp'){const d=pd(r.exp);if(!d)return false;const m=(d-TODAY)/(1000*60*60*24*30);if(m<0||m>12)return false;}
     if(alt==='spc'&&!r.geki&&!r.doku&&!r.muko) return false;
     return true;
   });
   cur.sort((a,b)=>{
     if(srt==='stock_d') return b.stock-a.stock;
     if(srt==='stock_a') return a.stock-b.stock;
-    if(srt==='months_d') return(parseInt(b.rawMonths)||0)-(parseInt(a.rawMonths)||0);
+    if(srt==='months_d') return(parseInt(b.rawM)||0)-(parseInt(a.rawM)||0);
     if(srt==='qty_d') return b.qty-a.qty;
     if(srt==='name_a') return a.name.localeCompare(b.name,'ja');
     return 0;
   });
-
   const total=cur.length,pages=Math.max(1,Math.ceil(total/PG));
   if(pgn>=pages) pgn=pages-1;
   if(pgn<0) pgn=0;
   const slice=cur.slice(pgn*PG,pgn*PG+PG);
-
-  const totalStock=DATA.filter(d=>d.stock>0).reduce((s,d)=>s+d.stock,0);
-  const negCnt=DATA.filter(d=>d.qty<0).length;
-  const alertCnt=DATA.filter(d=>getAlertsForList(d).length>0).length;
-
+  const ts=DATA.filter(d=>d.stock>0).reduce((s,d)=>s+d.stock,0);
+  const nc=DATA.filter(d=>d.qty<0).length;
+  const ac=DATA.filter(d=>listAlerts(d).length>0).length;
   document.getElementById('summ').innerHTML=`
-    <div class="metric"><div class="metric-label">品目数</div><div class="metric-val green">${DATA.length}</div></div>
-    <div class="metric"><div class="metric-label">在庫金額合計</div><div class="metric-val">${totalStock.toLocaleString()}円</div></div>
-    <div class="metric"><div class="metric-label">マイナス在庫</div><div class="metric-val red">${negCnt}品目</div></div>
-    <div class="metric"><div class="metric-label">要確認</div><div class="metric-val amber">${alertCnt}品目</div></div>
+    <div class="metric"><div class="mlabel">品目数</div><div class="mval green">${DATA.length}</div></div>
+    <div class="metric"><div class="mlabel">在庫金額合計</div><div class="mval">${ts.toLocaleString()}円</div></div>
+    <div class="metric"><div class="mlabel">マイナス在庫</div><div class="mval red">${nc}品目</div></div>
+    <div class="metric"><div class="mlabel">要確認</div><div class="mval amber">${ac}品目</div></div>
   `;
-  document.getElementById('countBar').textContent=`${total}件表示中（全${DATA.length}件）`;
-
+  document.getElementById('cbar').textContent=`${total}件表示中（全${DATA.length}件）`;
   document.getElementById('tb').innerHTML=slice.length?slice.map(r=>{
-    const al=getAlertsForList(r);
+    const al=listAlerts(r);
     const flags=[r.geki?'劇薬':'',r.doku?'毒薬':'',r.muko?'向精神薬':''].filter(Boolean);
     const neg=r.qty<0;
-    const kd=parseDate(r.keika);
-    const kCls=r.keika!=='-'?(kd&&kd<=TODAY?'keika-red':'keika-amber'):'muted';
+    const kd=pd(r.keika);
+    const kc=r.keika!=='-'?(kd&&kd<=TODAY?'kr':'ka'):'muted';
     return`<tr>
       <td class="num" style="color:var(--text3);font-size:11px">${r.code||'—'}</td>
-      <td class="name-cell" title="${r.name}">${r.name}</td>
+      <td class="ncell" title="${r.name}">${r.name}</td>
       <td>${r.cat}</td><td>${r.brand==='先発品'?'先発':'後発'}</td>
       <td>${flags.map(f=>`<span class="badge b-blue">${f}</span>`).join('')}</td>
       <td class="${neg?'neg':'num'}">${r.qty}</td>
       <td class="${neg?'neg':'num'}">${r.stock.toLocaleString()}</td>
-      <td class="num">${r.rawMonths}</td><td>${r.lastRx}</td><td>${r.exp}</td>
-      <td class="${r.keika!=='-'?kCls:'muted'}">${r.keika!=='-'?r.keika:'—'}</td>
-      <td class="${r.hanbai!=='-'?'keika-red':'muted'}">${r.hanbai!=='-'?r.hanbai:'—'}</td>
+      <td class="num">${r.rawM}</td><td>${r.lastRx}</td><td>${r.exp}</td>
+      <td class="${r.keika!=='-'?kc:'muted'}">${r.keika!=='-'?r.keika:'—'}</td>
+      <td class="${r.hanbai!=='-'?'kr':'muted'}">${r.hanbai!=='-'?r.hanbai:'—'}</td>
       <td>${al.map(a=>`<span class="badge ${a.cls}">${a.txt}</span>`).join('')}</td>
     </tr>`;
   }).join(''):`<tr><td colspan="13" class="empty">該当するデータがありません</td></tr>`;
-
   document.getElementById('pi').textContent=`${pgn+1} / ${pages} ページ`;
   document.getElementById('prv').disabled=pgn===0;
   document.getElementById('nxt').disabled=pgn>=pages-1;
 }
-
-renderHistory();
+renderHist();
 </script>
 </body>
 </html>
