@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GS1スキャン v4</title>
+<style>
+  body{font-family:sans-serif;padding:12px;background:#0f172a;color:#e2e8f0;max-width:500px;margin:0 auto}
+  h2{color:#4ade80;margin-bottom:8px;font-size:16px}
+  #videoWrap{position:relative;background:#000;border-radius:10px;overflow:hidden;margin-bottom:8px}
+  #video{width:100%;display:block;max-height:280px;object-fit:cover}
+  #overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  .guide{width:90%;height:80px;border:2px solid #4ade80;border-radius:4px;box-shadow:0 0 0 9999px rgba(0,0,0,0.5);position:relative}
+  .line{position:absolute;left:0;right:0;height:2px;background:#f87171;animation:scan 1.8s ease-in-out infinite}
+  @keyframes scan{0%,100%{top:5%}50%{top:90%}}
+  button{width:100%;padding:12px;margin:4px 0;font-size:15px;border:none;border-radius:8px;cursor:pointer;font-family:sans-serif;font-weight:bold}
+  #startBtn{background:#16a34a;color:#fff}
+  #stopBtn{background:#dc2626;color:#fff;display:none}
+  .result-box{background:#1e293b;border-radius:8px;padding:12px;margin:6px 0;font-size:12px;font-family:monospace;word-break:break-all;min-height:50px}
+  .result-box.success{border:1px solid #4ade80}
+  .result-box.fail{border:1px solid #475569}
+  #log{background:#020617;border-radius:8px;padding:10px;height:180px;overflow-y:auto;font-family:monospace;font-size:11px;color:#94a3b8;white-space:pre-wrap;word-break:break-all}
+  .ok{color:#4ade80}.err{color:#f87171}.info{color:#60a5fa}
+  select,input{background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:6px 10px;border-radius:6px;font-size:13px;width:100%;margin:3px 0}
+</style>
+</head>
+<body>
+
+<h2>📷 GS1-128スキャン v4</h2>
+
+<div id="videoWrap">
+  <video id="video" autoplay muted playsinline webkit-playsinline></video>
+  <div id="overlay" style="display:none">
+    <div class="guide"><div class="line"></div></div>
+  </div>
+</div>
+
+<div style="margin-bottom:6px">
+  <label style="font-size:11px;color:#94a3b8">解像度</label>
+  <select id="resMode">
+    <option value="hd">HD (1280×720) ← まずこれ</option>
+    <option value="fhd">FHD (1920×1080)</option>
+    <option value="auto">自動</option>
+  </select>
+</div>
+
+<button id="startBtn" onclick="start()">▶ スキャン開始</button>
+<button id="stopBtn" onclick="stop()">■ 停止</button>
+
+<div class="result-box fail" id="result">結果待機中...</div>
+
+<div style="font-size:11px;color:#64748b;margin:4px 0 8px">デバッグログ</div>
+<div id="log">待機中...</div>
+
+<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
+<script>
+let reader = null;
+
+function log(msg, cls='info'){
+  const el=document.getElementById('log');
+  const t=new Date().toLocaleTimeString('ja-JP');
+  el.innerHTML=`<span class="${cls}">[${t}] ${msg}</span>\n`+el.innerHTML;
+}
+
+function parseGS1(raw){
+  const r={gtin:null,expiry:null,lot:null};
+  const GS='\u001d';
+  // カッコ付き
+  if(raw.includes('(')){
+    for(const m of raw.matchAll(/\((\d{2,4})\)([^\(]*)/g)){
+      applyAI(r,m[1],m[2].trim());
+    }
+    return r;
+  }
+  // 生データ
+  let s=raw.replace(/[\u001e\u00e8]/g,GS);
+  if(s.charCodeAt(0)===0x1D) s=s.slice(1);
+  let pos=0,g=0;
+  while(pos<s.length&&g++<20){
+    const a2=s.slice(pos,pos+2),a3=s.slice(pos,pos+3),a4=s.slice(pos,pos+4);
+    let ai=a2;
+    if(/^31[0-9]$/.test(a3)||/^32[0-9]$/.test(a3)) ai=a3;
+    if(/^310[0-9]$/.test(a4)) ai=a4;
+    pos+=ai.length;
+    const fl=fixLen(ai);
+    let val;
+    if(fl>0){val=s.slice(pos,pos+fl);pos+=fl;}
+    else{const gi=s.indexOf(GS,pos);if(gi===-1){val=s.slice(pos);pos=s.length;}else{val=s.slice(pos,gi);pos=gi+1;}}
+    applyAI(r,ai,val);
+  }
+  return r;
+}
+function fixLen(ai){
+  const m={'00':18,'01':14,'02':14,'11':6,'12':6,'13':6,'14':6,'15':6,'16':6,'17':6,'18':6,'19':6,'20':2};
+  return m[ai]??-1;
+}
+function applyAI(r,ai,val){
+  if(ai==='01') r.gtin=val.replace(/\D/g,'');
+  if(ai==='17'&&val.length>=6){
+    const yy=parseInt(val.slice(0,2)),mm=parseInt(val.slice(2,4)),dd=parseInt(val.slice(4,6));
+    const yyyy=yy+(yy<50?2000:1900);
+    const day=dd===0?new Date(yyyy,mm,0).getDate():dd;
+    r.expiry=`${yyyy}/${String(mm).padStart(2,'0')}/${String(day).padStart(2,'0')}`;
+  }
+  if(ai==='10') r.lot=val;
+}
+
+async function start(){
+  document.getElementById('startBtn').style.display='none';
+  document.getElementById('stopBtn').style.display='block';
+  document.getElementById('overlay').style.display='flex';
+  log('ZXing初期化...');
+
+  // ヒントマップ：GS1-128優先・全形式フォールバック
+  const hints=new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[
+    ZXing.BarcodeFormat.CODE_128,
+    ZXing.BarcodeFormat.RSS_EXPANDED,
+    ZXing.BarcodeFormat.RSS_EXPANDED_STACKED,
+    ZXing.BarcodeFormat.RSS_14,
+    ZXing.BarcodeFormat.RSS_14_STACK,
+    ZXing.BarcodeFormat.EAN_13,
+    ZXing.BarcodeFormat.EAN_8,
+    ZXing.BarcodeFormat.DATA_MATRIX,
+    ZXing.BarcodeFormat.PDF_417,
+    ZXing.BarcodeFormat.QR_CODE,
+  ]);
+  // GS1フラグを有効化（重要）
+  hints.set(ZXing.DecodeHintType.ASSUME_GS1,true);
+  // 純粋バーコード（非QR）優先
+  hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
+
+  reader=new ZXing.BrowserMultiFormatReader(hints,{
+    delayBetweenScanAttempts:100,
+    delayBetweenScanSuccess:2000,
+  });
+
+  log('ZXing初期化完了','ok');
+
+  const res=document.getElementById('resMode').value;
+  const constraints={
+    video:{
+      facingMode:{ideal:'environment'},
+      ...(res==='hd'  ?{width:{ideal:1280},height:{ideal:720}}:
+          res==='fhd' ?{width:{ideal:1920},height:{ideal:1080}}:{}),
+      focusMode:{ideal:'continuous'},
+      exposureMode:{ideal:'continuous'},
+      whiteBalanceMode:{ideal:'continuous'},
+    }
+  };
+
+  log(`カメラ起動中 (${res})...`);
+  try{
+    await reader.decodeFromConstraints(
+      constraints,
+      document.getElementById('video'),
+      (result,err)=>{
+        if(result){
+          const raw=result.getText();
+          const fmt=result.getBarcodeFormat();
+          const disp=raw.replace(/\u001d/g,'[GS]');
+          log(`✅ 読取: [${fmt}]\n   ${disp}`,'ok');
+
+          const parsed=parseGS1(raw);
+          const el=document.getElementById('result');
+          el.className='result-box success';
+          el.innerHTML=
+            `<span style="color:#4ade80;font-size:14px">✅ 読み取り成功!</span><br>`+
+            `形式: <b>${fmt}</b><br>`+
+            `GTIN: ${parsed.gtin||'—'}<br>`+
+            `期限: <span style="color:${parsed.expiry?'#4ade80':'#94a3b8'}">${parsed.expiry||'—'}</span><br>`+
+            `ロット: ${parsed.lot||'—'}<br>`+
+            `<span style="font-size:10px;color:#64748b">RAW: ${disp}</span>`;
+        }
+        if(err&&!(err instanceof ZXing.NotFoundException)){
+          log('⚠ '+err.message,'err');
+        }
+      }
+    );
+    log('カメラ起動完了 ✅ バーコードをゆっくりかざしてください','ok');
+    log('ヒント: 明るい場所・10〜25cm・手ブレなし','info');
+  }catch(e){
+    log('❌ '+e.message,'err');
+    stop();
+  }
+}
+
+function stop(){
+  if(reader){reader.reset();reader=null;}
+  document.getElementById('startBtn').style.display='block';
+  document.getElementById('stopBtn').style.display='none';
+  document.getElementById('overlay').style.display='none';
+  log('停止');
+}
+</script>
+</body>
+</html>
