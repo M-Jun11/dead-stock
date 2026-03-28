@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GS1スキャン v8 反転Canvas対応</title>
+<style>
+  body{font-family:sans-serif;padding:12px;background:#0f172a;color:#e2e8f0;max-width:500px;margin:0 auto}
+  h2{color:#4ade80;margin-bottom:4px;font-size:16px}
+  p{font-size:11px;color:#64748b;margin-bottom:8px}
+  #videoWrap{position:relative;background:#000;border-radius:10px;overflow:hidden;margin-bottom:8px}
+  #video{width:100%;display:block;max-height:280px;object-fit:cover}
+  /* 反転プレビュー用canvas（デバッグ表示） */
+  #previewCanvas{width:100%;display:none;border-radius:6px;margin-bottom:6px}
+  .guide{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:88%;height:80px;border:2.5px solid #4ade80;border-radius:4px;box-shadow:0 0 0 9999px rgba(0,0,0,0.45);pointer-events:none}
+  .scanline{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#f87171,transparent);animation:sl 2s ease-in-out infinite}
+  @keyframes sl{0%,100%{top:5%}50%{top:88%}}
+
+  button.main{width:100%;padding:13px;margin:4px 0;font-size:15px;border:none;border-radius:8px;cursor:pointer;font-weight:bold}
+  #startBtn{background:#16a34a;color:#fff}
+  #stopBtn{background:#dc2626;color:#fff;display:none}
+
+  .panel{background:#1e293b;border-radius:8px;padding:10px;margin-bottom:8px;font-size:12px}
+  .panel-title{color:#94a3b8;margin-bottom:6px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em}
+  .row{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .row label{color:#94a3b8;white-space:nowrap;font-size:12px;min-width:80px}
+  input[type=range]{flex:1;height:5px;accent-color:#4ade80}
+  .val{font-family:monospace;font-size:13px;color:#4ade80;min-width:40px;text-align:right}
+  .toggle-row{display:flex;gap:6px;flex-wrap:wrap}
+  .toggle{padding:5px 10px;font-size:11px;border:1px solid #334155;background:#0f172a;color:#94a3b8;border-radius:6px;cursor:pointer}
+  .toggle.on{border-color:#4ade80;color:#4ade80;background:#052e16}
+  select{background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:4px 8px;border-radius:6px;font-size:12px}
+
+  .result-box{background:#1e293b;border-radius:8px;padding:14px;margin:8px 0;font-size:13px;word-break:break-all;min-height:60px;border:1px solid #334155}
+  .result-box.success{border:2px solid #4ade80}
+  #scanMode{font-size:10px;font-family:monospace;color:#64748b;text-align:center;margin-bottom:4px}
+  #log{background:#020617;border-radius:8px;padding:10px;height:150px;overflow-y:auto;font-family:monospace;font-size:11px;color:#94a3b8;white-space:pre-wrap;word-break:break-all}
+  .ok{color:#4ade80}.err{color:#f87171}.info{color:#60a5fa}.warn{color:#fbbf24}
+</style>
+</head>
+<body>
+
+<h2>📷 GS1スキャン v8（Canvas反転対応）</h2>
+<p>通常・反転バーコードを交互にスキャン</p>
+
+<div id="videoWrap">
+  <video id="video" autoplay muted playsinline webkit-playsinline></video>
+  <div class="guide" id="guide" style="display:none"><div class="scanline"></div></div>
+</div>
+
+<!-- 反転プレビュー -->
+<canvas id="previewCanvas"></canvas>
+
+<!-- コントロールパネル -->
+<div class="panel">
+  <div class="panel-title">スキャン設定</div>
+
+  <!-- ズーム -->
+  <div class="row">
+    <label>🔍 ズーム</label>
+    <input type="range" id="zoomSlider" min="1" max="8" step="0.5" value="1" oninput="applyZoom(this.value)">
+    <span class="val" id="zoomVal">×1.0</span>
+  </div>
+
+  <!-- スキャン間隔 -->
+  <div class="row">
+    <label>⏱ 間隔</label>
+    <select id="interval">
+      <option value="50">50ms（高速）</option>
+      <option value="100" selected>100ms</option>
+      <option value="200">200ms</option>
+    </select>
+  </div>
+
+  <!-- スキャンモード -->
+  <div class="row" style="margin-top:6px">
+    <label>モード</label>
+    <div class="toggle-row">
+      <button class="toggle on" id="tog-normal" onclick="toggleMode('normal')">通常</button>
+      <button class="toggle on" id="tog-invert" onclick="toggleMode('invert')">反転★</button>
+      <button class="toggle" id="tog-preview" onclick="toggleMode('preview')">反転プレビュー</button>
+    </div>
+  </div>
+</div>
+
+<div id="scanMode">待機中</div>
+<button class="main" id="startBtn" onclick="start()">▶ スキャン開始</button>
+<button class="main" id="stopBtn" onclick="stop()">■ 停止</button>
+
+<div class="result-box" id="result" style="color:#64748b">スキャン結果がここに表示されます</div>
+<div id="log">待機中...</div>
+
+<!-- ZXing -->
+<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
+<script>
+// =============================================
+// 設定
+// =============================================
+let stream = null, track = null;
+let scanning = false;
+let frameTimer = null;
+let modeNormal = true;   // 通常スキャン有効
+let modeInvert = true;   // 反転スキャン有効
+let modePreview = false; // 反転プレビュー表示
+let lastRaw = '', lastTime = 0;
+let frameCount = 0;
+
+// ZXing reader（共通）
+let zxingReader = null;
+
+function log(msg, cls='info'){
+  const el=document.getElementById('log');
+  const t=new Date().toLocaleTimeString('ja-JP');
+  el.innerHTML=`<span class="${cls}">[${t}] ${msg}</span>\n`+el.innerHTML;
+}
+
+// =============================================
+// GS1解析
+// =============================================
+function parseGS1(raw){
+  const r={gtin:null,expiry:null,lot:null};
+  const GS='\u001d';
+  if(raw.includes('(')){
+    for(const m of raw.matchAll(/\((\d{2,4})\)([^\(]*)/g)) applyAI(r,m[1],m[2].trim());
+    return r;
+  }
+  let s=raw.replace(/[\u001e\u00e8]/g,GS);
+  if(s.charCodeAt(0)===0x1D) s=s.slice(1);
+  let pos=0,g=0;
+  while(pos<s.length&&g++<20){
+    const a2=s.slice(pos,pos+2),a3=s.slice(pos,pos+3),a4=s.slice(pos,pos+4);
+    let ai=a2;
+    if(/^31[0-9]$/.test(a3)||/^32[0-9]$/.test(a3)) ai=a3;
+    if(/^310[0-9]$/.test(a4)) ai=a4;
+    pos+=ai.length;
+    const fl={'00':18,'01':14,'02':14,'11':6,'12':6,'13':6,'14':6,'15':6,'16':6,'17':6,'18':6,'19':6,'20':2}[ai]??-1;
+    let val;
+    if(fl>0){val=s.slice(pos,pos+fl);pos+=fl;}
+    else{const gi=s.indexOf(GS,pos);if(gi===-1){val=s.slice(pos);pos=s.length;}else{val=s.slice(pos,gi);pos=gi+1;}}
+    applyAI(r,ai,val);
+  }
+  return r;
+}
+function applyAI(r,ai,val){
+  if(ai==='01') r.gtin=val.replace(/\D/g,'');
+  if(ai==='17'&&val.length>=6){
+    const yy=parseInt(val.slice(0,2)),mm=parseInt(val.slice(2,4)),dd=parseInt(val.slice(4,6));
+    const yyyy=yy+(yy<50?2000:1900);
+    const day=dd===0?new Date(yyyy,mm,0).getDate():dd;
+    r.expiry=`${yyyy}/${String(mm).padStart(2,'0')}/${String(day).padStart(2,'0')}`;
+  }
+  if(ai==='10') r.lot=val;
+}
+
+function showResult(raw, fmt, wasInverted){
+  const now=Date.now();
+  if(raw===lastRaw&&now-lastTime<3000) return;
+  lastRaw=raw; lastTime=now;
+
+  const p=parseGS1(raw);
+  const disp=raw.replace(/\u001d/g,'[GS]');
+  log(`✅ 読取! [${fmt}]${wasInverted?' (反転モード)':''}\n   ${disp}`,'ok');
+
+  let expColor='#94a3b8',expLabel='';
+  if(p.expiry){
+    const diff=(new Date(p.expiry.replace(/\//g,'-'))-new Date())/86400000;
+    if(diff<0){expColor='#f87171';expLabel=` ⚠️ 期限切れ`;}
+    else if(diff<=90){expColor='#f87171';expLabel=` ⚠️ 残り${Math.floor(diff)}日`;}
+    else if(diff<=365){expColor='#fbbf24';expLabel=` 残り約${Math.floor(diff/30)}ヶ月`;}
+    else{expColor='#4ade80';expLabel=` 残り約${Math.floor(diff/365)}年`;}
+  }
+
+  const el=document.getElementById('result');
+  el.className='result-box success';
+  el.innerHTML=
+    `<div style="color:#4ade80;font-size:15px;font-weight:bold;margin-bottom:8px">✅ 読み取り成功！${wasInverted?'<span style="font-size:11px;color:#fbbf24">（反転モード）</span>':''}</div>`+
+    `<div><span style="color:#64748b;font-size:11px">形式：</span>${fmt}</div>`+
+    `<div><span style="color:#64748b;font-size:11px">GTIN：</span><span style="font-family:monospace">${p.gtin||'—'}</span></div>`+
+    `<div><span style="color:#64748b;font-size:11px">有効期限：</span><span style="font-family:monospace;color:${expColor}">${p.expiry||'—'}${expLabel}</span></div>`+
+    `<div><span style="color:#64748b;font-size:11px">ロット：</span><span style="font-family:monospace">${p.lot||'—'}</span></div>`+
+    `<div style="font-size:10px;color:#475569;margin-top:6px">RAW: ${disp}</div>`;
+}
+
+// =============================================
+// ★ Canvasフレーム解析（通常 + 反転）
+// =============================================
+const offCanvas = document.createElement('canvas');
+const offCtx = offCanvas.getContext('2d', {willReadFrequently: true});
+
+async function analyzeFrame(){
+  if(!scanning) return;
+
+  const video = document.getElementById('video');
+  if(video.readyState < video.HAVE_ENOUGH_DATA){
+    scheduleNext(); return;
+  }
+
+  const W = video.videoWidth || 1280;
+  const H = video.videoHeight || 720;
+  offCanvas.width = W;
+  offCanvas.height = H;
+
+  // フレームをCanvasに描画
+  offCtx.drawImage(video, 0, 0, W, H);
+
+  frameCount++;
+  const isEvenFrame = frameCount % 2 === 0;
+
+  // 通常フレームと反転フレームを交互に処理
+  const doNormal = modeNormal && (isEvenFrame || !modeInvert);
+  const doInvert = modeInvert && (!isEvenFrame || !modeNormal);
+
+  // ① 通常スキャン
+  if(doNormal){
+    document.getElementById('scanMode').textContent = `🔲 通常スキャン中 (frame ${frameCount})`;
+    try{
+      const imageData = offCtx.getImageData(0, 0, W, H);
+      const luminance = new ZXing.RGBLuminanceSource(imageData.data, W, H);
+      const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminance));
+      const result = zxingReader.decode(bitmap);
+      if(result) showResult(result.getText(), result.getBarcodeFormat().toString(), false);
+    } catch(e){
+      // NotFoundException は無視
+    }
+  }
+
+  // ② ★反転スキャン（ピクセル値を反転してからZXingに渡す）
+  if(doInvert){
+    document.getElementById('scanMode').textContent = `⬛ 反転スキャン中 (frame ${frameCount})`;
+    try{
+      // 元のImageDataを取得
+      const imageData = offCtx.getImageData(0, 0, W, H);
+      const data = imageData.data;
+
+      // ★ピクセル反転処理（RGB値を255から引く）
+      const invertedData = new Uint8ClampedArray(data.length);
+      for(let i=0; i<data.length; i+=4){
+        invertedData[i]   = 255 - data[i];   // R反転
+        invertedData[i+1] = 255 - data[i+1]; // G反転
+        invertedData[i+2] = 255 - data[i+2]; // B反転
+        invertedData[i+3] = data[i+3];        // Alpha（そのまま）
+      }
+
+      // 反転プレビュー表示（デバッグ用）
+      if(modePreview){
+        const pc = document.getElementById('previewCanvas');
+        pc.width = W; pc.height = H;
+        const pctx = pc.getContext('2d');
+        const invertedImageData = new ImageData(invertedData, W, H);
+        pctx.putImageData(invertedImageData, 0, 0);
+      }
+
+      // 反転データをZXingで解析
+      const luminance = new ZXing.RGBLuminanceSource(invertedData, W, H);
+      const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminance));
+      const result = zxingReader.decode(bitmap);
+      if(result) showResult(result.getText(), result.getBarcodeFormat().toString(), true);
+    } catch(e){
+      // NotFoundException は無視
+    }
+  }
+
+  scheduleNext();
+}
+
+function scheduleNext(){
+  if(!scanning) return;
+  const ms = parseInt(document.getElementById('interval').value);
+  frameTimer = setTimeout(analyzeFrame, ms);
+}
+
+// =============================================
+// カメラ制御
+// =============================================
+async function start(){
+  document.getElementById('startBtn').style.display='none';
+  document.getElementById('stopBtn').style.display='block';
+  document.getElementById('guide').style.display='block';
+  log('カメラ起動中（1920×1080目標）...');
+
+  // ZXing初期化（MultiFormatReader）
+  const hints=new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[
+    ZXing.BarcodeFormat.CODE_128,
+    ZXing.BarcodeFormat.RSS_EXPANDED,
+    ZXing.BarcodeFormat.RSS_EXPANDED_STACKED,
+    ZXing.BarcodeFormat.RSS_14,
+    ZXing.BarcodeFormat.RSS_14_STACK,
+    ZXing.BarcodeFormat.EAN_13,
+    ZXing.BarcodeFormat.EAN_8,
+    ZXing.BarcodeFormat.PDF_417,
+    ZXing.BarcodeFormat.DATA_MATRIX,
+    ZXing.BarcodeFormat.QR_CODE,
+  ]);
+  hints.set(ZXing.DecodeHintType.ASSUME_GS1, true);
+  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+  zxingReader = new ZXing.MultiFormatReader();
+  zxingReader.setHints(hints);
+  log('ZXing MultiFormatReader 初期化完了','ok');
+
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{
+        facingMode:{ideal:'environment'},
+        width:{ideal:1920,min:1280},
+        height:{ideal:1080,min:720},
+        focusMode:{ideal:'continuous'},
+        exposureMode:{ideal:'continuous'},
+        whiteBalanceMode:{ideal:'continuous'},
+      }
+    });
+    track = stream.getVideoTracks()[0];
+    const s = track.getSettings();
+    log(`解像度: ${s.width}×${s.height}`,'ok');
+    log(`フォーカス: ${s.focusMode||'不明'}`,'info');
+
+    // ズームサポート確認
+    const caps = track.getCapabilities?.()??{};
+    if(caps.zoom){
+      document.getElementById('zoomSlider').min=caps.zoom.min;
+      document.getElementById('zoomSlider').max=Math.min(caps.zoom.max,8);
+      log(`ハードウェアズーム: ×${caps.zoom.min}〜×${caps.zoom.max.toFixed(1)}`,'ok');
+    } else {
+      log('CSSソフトウェアズームを使用','warn');
+    }
+
+    const video = document.getElementById('video');
+    video.srcObject = stream;
+    await video.play();
+    log('カメラ起動完了 ✅','ok');
+    log('通常・反転の両モードで交互スキャン開始','info');
+    log('黒背景バーコードには反転モードが有効です','warn');
+
+    scanning = true;
+    analyzeFrame(); // フレーム解析ループ開始
+
+  } catch(e){
+    log('❌ エラー: '+e.message,'err');
+    stop();
+  }
+}
+
+function stop(){
+  scanning = false;
+  clearTimeout(frameTimer);
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  track = null;
+  zxingReader = null;
+  const video=document.getElementById('video');
+  video.style.transform='';
+  video.srcObject=null;
+  document.getElementById('startBtn').style.display='block';
+  document.getElementById('stopBtn').style.display='none';
+  document.getElementById('guide').style.display='none';
+  document.getElementById('previewCanvas').style.display='none';
+  document.getElementById('scanMode').textContent='停止';
+  log('停止しました');
+}
+
+// =============================================
+// ズーム
+// =============================================
+async function applyZoom(val){
+  val=parseFloat(val);
+  document.getElementById('zoomVal').textContent=`×${val.toFixed(1)}`;
+  if(!track) return;
+  try{
+    await track.applyConstraints({advanced:[{zoom:val}]});
+    log(`ハードウェアズーム ×${val}`,'ok');
+  } catch(e){
+    document.getElementById('video').style.transform=`scale(${val})`;
+    document.getElementById('video').style.transformOrigin='center center';
+    log(`CSSズーム ×${val}`,'warn');
+  }
+}
+
+// =============================================
+// モード切替
+// =============================================
+function toggleMode(mode){
+  if(mode==='normal'){
+    modeNormal=!modeNormal;
+    document.getElementById('tog-normal').className='toggle'+(modeNormal?' on':'');
+    log(`通常スキャン: ${modeNormal?'ON':'OFF'}`,'info');
+  } else if(mode==='invert'){
+    modeInvert=!modeInvert;
+    document.getElementById('tog-invert').className='toggle'+(modeInvert?' on':'');
+    log(`反転スキャン: ${modeInvert?'ON':'OFF'}`,'info');
+  } else if(mode==='preview'){
+    modePreview=!modePreview;
+    document.getElementById('tog-preview').className='toggle'+(modePreview?' on':'');
+    document.getElementById('previewCanvas').style.display=modePreview?'block':'none';
+    log(`反転プレビュー: ${modePreview?'ON':'OFF'}`,'info');
+  }
+}
+</script>
+</body>
+</html>
