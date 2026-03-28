@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>在庫スキャン | 調剤薬局</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+  * { font-family: 'Noto Sans JP', sans-serif; }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  /* カメラビュー */
+  #video { width: 100%; display: block; object-fit: cover; }
+  #canvas { display: none; }
+
+  /* スキャン枠アニメーション */
+  .scan-frame {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+  .scan-box {
+    width: 85%;
+    height: 100px;
+    position: relative;
+  }
+  .scan-box::before, .scan-box::after,
+  .scan-box > span::before, .scan-box > span::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border-color: #4ade80;
+    border-style: solid;
+  }
+  .scan-box::before { top: 0; left: 0; border-width: 3px 0 0 3px; }
+  .scan-box::after  { top: 0; right: 0; border-width: 3px 3px 0 0; }
+  .scan-box > span::before { bottom: 0; left: 0; border-width: 0 0 3px 3px; }
+  .scan-box > span::after  { bottom: 0; right: 0; border-width: 0 3px 3px 0; }
+
+  .scan-line {
+    position: absolute;
+    left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #4ade80, transparent);
+    animation: scanline 2s ease-in-out infinite;
+  }
+  @keyframes scanline {
+    0%, 100% { top: 10%; opacity: 0.8; }
+    50% { top: 88%; opacity: 1; }
+  }
+
+  .pulse-ring {
+    animation: pulseRing 1.5s ease-out infinite;
+  }
+  @keyframes pulseRing {
+    0% { transform: scale(1); opacity: 0.8; }
+    100% { transform: scale(1.08); opacity: 0; }
+  }
+
+  /* 成功フラッシュ */
+  .flash { animation: flash 0.3s ease-out; }
+  @keyframes flash {
+    0% { background: rgba(74,222,128,0.3); }
+    100% { background: transparent; }
+  }
+
+  /* スライドイン */
+  .slide-in { animation: slideIn 0.3s ease-out; }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- ヘッダー -->
+<header class="bg-emerald-800 text-white sticky top-0 z-50 shadow-lg">
+  <div class="flex items-center justify-between px-4 py-3">
+    <div>
+      <p class="text-xs opacity-70 mono">PHARMACY INVENTORY</p>
+      <h1 class="text-base font-bold tracking-wide">在庫スキャン登録</h1>
+    </div>
+    <div id="headerStatus" class="text-xs opacity-75 text-right mono">待機中</div>
+  </div>
+</header>
+
+<!-- タブ -->
+<div class="flex bg-white border-b border-gray-200 sticky top-14 z-40">
+  <button onclick="showTab('scan')" id="tab-scan"
+    class="flex-1 py-3 text-sm font-medium text-emerald-700 border-b-2 border-emerald-600">
+    📷 スキャン
+  </button>
+  <button onclick="showTab('list')" id="tab-list"
+    class="flex-1 py-3 text-sm font-medium text-gray-400 border-b-2 border-transparent">
+    📋 リスト
+  </button>
+  <button onclick="showTab('log')" id="tab-log"
+    class="flex-1 py-3 text-sm font-medium text-gray-400 border-b-2 border-transparent">
+    🔍 ログ
+  </button>
+</div>
+
+<!-- ===== スキャンタブ ===== -->
+<div id="tab-scan-content" class="pb-24">
+
+  <!-- カメラ -->
+  <div class="relative bg-black" style="height: 260px; overflow: hidden;">
+    <video id="video" autoplay muted playsinline style="height:260px;object-fit:cover;"></video>
+    <canvas id="canvas"></canvas>
+
+    <!-- スキャン枠 -->
+    <div class="scan-frame" id="scanFrame" style="display:none">
+      <div class="scan-box">
+        <span></span>
+        <div class="scan-line"></div>
+      </div>
+    </div>
+
+    <!-- オーバーレイ -->
+    <div id="cameraOverlay" class="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-70">
+      <div class="w-16 h-16 rounded-full bg-emerald-600 bg-opacity-20 flex items-center justify-center mb-4 pulse-ring">
+        <svg class="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+      </div>
+      <p class="text-white text-sm font-medium">カメラを起動してください</p>
+    </div>
+  </div>
+
+  <!-- ステータスバー -->
+  <div id="statusBar" class="mx-4 mt-3 px-4 py-2 rounded-lg bg-gray-100 text-gray-500 text-xs mono flex items-center gap-2">
+    <div class="w-2 h-2 rounded-full bg-gray-400" id="statusDot"></div>
+    <span id="statusText">スタートボタンを押してください</span>
+  </div>
+
+  <!-- ボタン -->
+  <div class="px-4 mt-3 flex gap-3">
+    <button id="startBtn" onclick="startScan()"
+      class="flex-1 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold py-3 rounded-xl text-sm transition-colors shadow-md">
+      📷 スキャン開始
+    </button>
+    <button id="stopBtn" onclick="stopScan()" style="display:none"
+      class="flex-1 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold py-3 rounded-xl text-sm transition-colors shadow-md">
+      ■ 停止
+    </button>
+  </div>
+
+  <!-- スキャン結果・入力フォーム -->
+  <div id="formCard" class="mx-4 mt-4 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden slide-in" style="display:none">
+    <div class="bg-emerald-50 px-4 py-3 border-b border-emerald-100">
+      <p class="text-xs text-emerald-700 font-medium mono">SCAN RESULT</p>
+      <p class="text-sm font-bold text-emerald-900 mt-0.5">読み取り成功 ✅</p>
+    </div>
+
+    <div class="p-4 space-y-4">
+
+      <!-- GTIN -->
+      <div>
+        <label class="block text-xs text-gray-500 font-medium mb-1">① 商品コード（GTIN）</label>
+        <input id="fGtin" type="text" readonly
+          class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm mono font-medium text-gray-700 focus:outline-none">
+      </div>
+
+      <!-- 商品名 -->
+      <div>
+        <label class="block text-xs text-gray-500 font-medium mb-1">② 商品名</label>
+        <input id="fName" type="text" placeholder="商品名を入力（またはマスターから自動入力）"
+          class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+      </div>
+
+      <!-- 在庫数量 -->
+      <div>
+        <label class="block text-xs text-gray-500 font-medium mb-1">③ 在庫数量</label>
+        <div class="flex gap-2 items-center">
+          <button onclick="changeQty(-10)" class="w-10 h-10 rounded-lg bg-gray-100 active:bg-gray-200 text-gray-700 font-bold text-lg">-</button>
+          <button onclick="changeQty(-1)"  class="w-10 h-10 rounded-lg bg-gray-100 active:bg-gray-200 text-gray-700 font-bold text-lg">-1</button>
+          <input id="fQty" type="number" value="0" min="0"
+            class="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-center text-xl font-bold mono focus:outline-none focus:border-emerald-500">
+          <button onclick="changeQty(1)"   class="w-10 h-10 rounded-lg bg-gray-100 active:bg-gray-200 text-gray-700 font-bold text-lg">+1</button>
+          <button onclick="changeQty(10)"  class="w-10 h-10 rounded-lg bg-gray-100 active:bg-gray-200 text-gray-700 font-bold text-lg">+</button>
+        </div>
+      </div>
+
+      <!-- 使用期限 -->
+      <div>
+        <label class="block text-xs text-gray-500 font-medium mb-1">④ 使用期限</label>
+        <div id="fExpDisplay" class="px-3 py-2 rounded-lg text-sm mono font-bold bg-gray-50 border border-gray-200 text-gray-700">—</div>
+      </div>
+
+      <!-- 区分 -->
+      <div>
+        <label class="block text-xs text-gray-500 font-medium mb-1">⑤ 区分</label>
+        <div class="grid grid-cols-2 gap-2">
+          <select id="fCat1" class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500">
+            <option value="">剤形を選択</option>
+            <option>内服薬</option>
+            <option>外用薬</option>
+            <option>注射薬</option>
+          </select>
+          <select id="fCat2" class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500">
+            <option value="">規制を選択</option>
+            <option>一般薬</option>
+            <option>劇薬</option>
+            <option>毒薬</option>
+            <option>向精神薬</option>
+            <option>麻薬</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- ロット -->
+      <div>
+        <label class="block text-xs text-gray-500 font-medium mb-1">ロット番号</label>
+        <input id="fLot" type="text" readonly
+          class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm mono text-gray-500 focus:outline-none">
+      </div>
+
+      <!-- 登録ボタン -->
+      <button id="registerBtn" onclick="register()"
+        class="w-full bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white font-bold py-4 rounded-xl text-base transition-colors shadow-md">
+        ✅ 登録する（スプレッドシートに保存）
+      </button>
+
+      <!-- 登録ステータス -->
+      <div id="registerStatus" class="text-center text-sm" style="display:none"></div>
+
+    </div>
+  </div>
+
+  <!-- 使い方ヒント -->
+  <div class="mx-4 mt-4 bg-blue-50 rounded-xl border border-blue-100 p-4" id="hintCard">
+    <p class="text-xs font-bold text-blue-800 mb-2">📌 スキャン対応バーコード</p>
+    <ul class="text-xs text-blue-700 space-y-1">
+      <li>・ GS1データバー２層型（スタック）</li>
+      <li>・ Code128 / GS1-128</li>
+      <li>・ EAN-13（通常バーコード）</li>
+      <li>・ QRコード / Data Matrix</li>
+    </ul>
+    <p class="text-xs text-blue-600 mt-2">バーコードから <strong>15〜25cm</strong> 離してゆっくり近づけてください</p>
+  </div>
+
+</div>
+
+<!-- ===== リストタブ ===== -->
+<div id="tab-list-content" class="pb-24" style="display:none">
+  <div class="p-4">
+    <div class="flex justify-between items-center mb-3">
+      <h2 class="font-bold text-gray-700">登録済みリスト</h2>
+      <div class="flex gap-2">
+        <button onclick="exportCSV()" class="px-3 py-1.5 bg-emerald-700 text-white text-xs rounded-lg font-medium">CSV保存</button>
+        <button onclick="clearList()" class="px-3 py-1.5 bg-gray-200 text-gray-600 text-xs rounded-lg font-medium">クリア</button>
+      </div>
+    </div>
+    <div id="listItems" class="space-y-3">
+      <p class="text-center text-gray-400 text-sm py-8">登録データがありません</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ログタブ ===== -->
+<div id="tab-log-content" class="pb-24" style="display:none">
+  <div class="p-4">
+    <div class="flex justify-between items-center mb-3">
+      <h2 class="font-bold text-gray-700">デバッグログ</h2>
+      <button onclick="document.getElementById('logBody').textContent=''" class="px-3 py-1.5 bg-gray-200 text-gray-600 text-xs rounded-lg">クリア</button>
+    </div>
+    <div id="logBody" class="bg-gray-900 text-green-400 rounded-xl p-3 text-xs mono min-h-64 max-h-96 overflow-y-auto whitespace-pre-wrap">
+ログ待機中...
+    </div>
+  </div>
+</div>
+
+<!-- ZXing-JS（GS1 DataBar Stackedを含む全形式対応） -->
+<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
+
+<script>
+// =============================================
+// GS1-128 / GS1 DataBar 解析ロジック
+// =============================================
+function parseGS1(rawValue) {
+  const r = { gtin: null, expiry: null, expiryDate: null, lot: null, raw: rawValue };
+  const GS = '\u001d';
+
+  // ① カッコ付きフォーマット (01)xxx(17)xxx(10)xxx
+  if (rawValue.includes('(')) {
+    for (const m of rawValue.matchAll(/\((\d{2,4})\)([^\(]*)/g)) {
+      applyAI(r, m[1], m[2].trim().replace(/\s+/g, ''));
+    }
+    return r;
+  }
+
+  // ② 生GS1（FNC1区切り）
+  let s = rawValue.replace(/[\u001e\u00e8]/g, GS);
+  if (s.charCodeAt(0) === 0x1D) s = s.slice(1);
+
+  let pos = 0, guard = 0;
+  while (pos < s.length && guard++ < 30) {
+    // AI長さ判定（2〜4桁）
+    const try2 = s.slice(pos, pos + 2);
+    const try3 = s.slice(pos, pos + 3);
+    const try4 = s.slice(pos, pos + 4);
+    let ai = try2;
+    if (/^31[0-9]$/.test(try3) || /^32[0-9]$/.test(try3) || /^35[0-9]$/.test(try3) || /^36[0-9]$/.test(try3)) ai = try3;
+    if (/^310[0-9]$/.test(try4) || /^320[0-9]$/.test(try4)) ai = try4;
+    pos += ai.length;
+
+    const fl = getFixedLen(ai);
+    let val;
+    if (fl > 0) {
+      val = s.slice(pos, pos + fl);
+      pos += fl;
+    } else {
+      const gi = s.indexOf(GS, pos);
+      if (gi === -1) { val = s.slice(pos); pos = s.length; }
+      else { val = s.slice(pos, gi); pos = gi + 1; }
+    }
+    applyAI(r, ai, val);
+  }
+  return r;
+}
+
+function getFixedLen(ai) {
+  const m = { '00':18,'01':14,'02':14,'03':14,'04':16,'11':6,'12':6,'13':6,'14':6,'15':6,'16':6,'17':6,'18':6,'19':6,'20':2 };
+  if (m[ai] !== undefined) return m[ai];
+  if (/^3[12356][0-9]{1,2}$/.test(ai)) return 6;
+  return -1;
+}
+
+function applyAI(r, ai, val) {
+  if (ai === '01' || ai === '02') r.gtin = val.replace(/\D/g, '').padStart(14, '0');
+  if (ai === '17' && val.length >= 6) {
+    const yy = parseInt(val.slice(0,2)), mm = parseInt(val.slice(2,4)), dd = parseInt(val.slice(4,6));
+    const yyyy = yy + (yy < 50 ? 2000 : 1900);
+    const day = dd === 0 ? new Date(yyyy, mm, 0).getDate() : dd;
+    r.expiryDate = new Date(yyyy, mm - 1, day);
+    r.expiry = `${yyyy}/${String(mm).padStart(2,'0')}/${String(day).padStart(2,'0')}`;
+  }
+  if (ai === '10') r.lot = val;
+}
+
+function getExpiryStatus(date) {
+  if (!date) return { color: 'text-gray-400', bg: 'bg-gray-50', label: '期限情報なし' };
+  const diff = (date - new Date()) / 86400000;
+  if (diff < 0) return { color: 'text-red-700', bg: 'bg-red-50 border-red-200', label: `期限切れ（${Math.abs(Math.floor(diff))}日経過）` };
+  if (diff <= 90) return { color: 'text-red-600', bg: 'bg-red-50 border-red-200', label: `残り${Math.floor(diff)}日 ⚠️` };
+  if (diff <= 365) return { color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200', label: `残り約${Math.floor(diff/30)}ヶ月` };
+  return { color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200', label: `残り約${Math.floor(diff/365)}年${Math.floor((diff%365)/30)}ヶ月` };
+}
+
+// =============================================
+// ZXing スキャン制御
+// =============================================
+let codeReader = null;
+let scanning = false;
+let lastRaw = '';
+let lastTime = 0;
+
+function addLog(msg) {
+  const el = document.getElementById('logBody');
+  const t = new Date().toLocaleTimeString('ja-JP', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  el.textContent = `[${t}] ${msg}\n` + el.textContent;
+}
+
+function setStatus(msg, type = 'idle') {
+  document.getElementById('statusText').textContent = msg;
+  document.getElementById('headerStatus').textContent = msg.slice(0, 20);
+  const dot = document.getElementById('statusDot');
+  dot.className = 'w-2 h-2 rounded-full ' + (
+    type === 'scanning' ? 'bg-emerald-500 animate-pulse' :
+    type === 'success'  ? 'bg-green-500' :
+    type === 'error'    ? 'bg-red-500' : 'bg-gray-400'
+  );
+}
+
+async function startScan() {
+  if (scanning) return;
+
+  // ZXingの初期化
+  // GS1 DataBar Stackedは ZXing JS 0.19.1 で RSS_EXPANDED_STACKED フォーマットとして対応
+  codeReader = new ZXing.BrowserMultiFormatReader(null, {
+    delayBetweenScanAttempts: 150,
+  });
+
+  const hints = new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+    ZXing.BarcodeFormat.RSS_EXPANDED,         // GS1 DataBar Expanded
+    ZXing.BarcodeFormat.RSS_EXPANDED_STACKED, // GS1 DataBar Stacked ★
+    ZXing.BarcodeFormat.RSS_14,               // GS1 DataBar
+    ZXing.BarcodeFormat.RSS_14_STACK,         // GS1 DataBar Stacked Omnidirectional
+    ZXing.BarcodeFormat.CODE_128,             // Code128 / GS1-128
+    ZXing.BarcodeFormat.EAN_13,
+    ZXing.BarcodeFormat.EAN_8,
+    ZXing.BarcodeFormat.DATA_MATRIX,
+    ZXing.BarcodeFormat.QR_CODE,
+    ZXing.BarcodeFormat.PDF_417,
+  ]);
+
+  codeReader = new ZXing.BrowserMultiFormatReader(hints, {
+    delayBetweenScanAttempts: 150,
+  });
+
+  document.getElementById('startBtn').style.display = 'none';
+  document.getElementById('stopBtn').style.display = 'block';
+  document.getElementById('cameraOverlay').style.display = 'none';
+  document.getElementById('scanFrame').style.display = 'flex';
+  setStatus('スキャン中…', 'scanning');
+  scanning = true;
+
+  try {
+    await codeReader.decodeFromConstraints(
+      {
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          focusMode: { ideal: 'continuous' },  // オートフォーカス（iPhone対応）
+        }
+      },
+      document.getElementById('video'),
+      (result, err) => {
+        if (result) onScanSuccess(result.getText(), result.getBarcodeFormat());
+        if (err && !(err instanceof ZXing.NotFoundException)) {
+          addLog('⚠️ ' + err.message);
+        }
+      }
+    );
+  } catch (e) {
+    setStatus('カメラエラー: ' + e.message, 'error');
+    addLog('❌ カメラ起動失敗: ' + e.message);
+    stopScan();
+  }
+}
+
+function stopScan() {
+  if (codeReader) { codeReader.reset(); codeReader = null; }
+  scanning = false;
+  document.getElementById('startBtn').style.display = 'block';
+  document.getElementById('stopBtn').style.display = 'none';
+  document.getElementById('cameraOverlay').style.display = 'flex';
+  document.getElementById('scanFrame').style.display = 'none';
+  setStatus('停止しました', 'idle');
+  addLog('スキャン停止');
+}
+
+function onScanSuccess(rawValue, format) {
+  const now = Date.now();
+  if (rawValue === lastRaw && now - lastTime < 3000) return;
+  lastRaw = rawValue; lastTime = now;
+
+  const formatName = format ? format.toString() : 'UNKNOWN';
+  const displayRaw = rawValue.replace(/\u001d/g, '[GS]');
+  addLog(`✅ 読取成功\n   形式: ${formatName}\n   RAW: ${displayRaw}`);
+
+  // GS1解析
+  const parsed = parseGS1(rawValue);
+  const expSt = getExpiryStatus(parsed.expiryDate);
+
+  addLog(`   GTIN: ${parsed.gtin||'なし'}\n   期限: ${parsed.expiry||'なし'}\n   ロット: ${parsed.lot||'なし'}`);
+
+  // フォームに反映
+  document.getElementById('fGtin').value = parsed.gtin || rawValue;
+  document.getElementById('fLot').value = parsed.lot || '—';
+  document.getElementById('fQty').value = 0;
+
+  // 使用期限表示
+  const expEl = document.getElementById('fExpDisplay');
+  expEl.textContent = (parsed.expiry || '情報なし') + (parsed.expiry ? `　${expSt.label}` : '');
+  expEl.className = `px-3 py-2 rounded-lg text-sm mono font-bold border ${expSt.bg} ${expSt.color}`;
+
+  // 商品名マスター照合（後でGASから取得）
+  document.getElementById('fName').value = '';
+  document.getElementById('fName').placeholder = '商品名を入力';
+
+  document.getElementById('formCard').style.display = 'block';
+  document.getElementById('hintCard').style.display = 'none';
+  setStatus('読み取り成功 ✅', 'success');
+
+  // フォームにスクロール
+  document.getElementById('formCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function changeQty(delta) {
+  const el = document.getElementById('fQty');
+  const v = parseInt(el.value) || 0;
+  el.value = Math.max(0, v + delta);
+}
+
+// =============================================
+// データ登録（GASエンドポイントに送信）
+// =============================================
+const GAS_URL = ''; // ← Step2でGASのURLをここに貼り付け
+
+let registeredList = [];
+
+async function register() {
+  const data = {
+    timestamp: new Date().toISOString(),
+    gtin:    document.getElementById('fGtin').value,
+    name:    document.getElementById('fName').value,
+    qty:     parseInt(document.getElementById('fQty').value) || 0,
+    expiry:  document.getElementById('fExpDisplay').textContent.split('　')[0],
+    cat1:    document.getElementById('fCat1').value,
+    cat2:    document.getElementById('fCat2').value,
+    lot:     document.getElementById('fLot').value,
+  };
+
+  // バリデーション
+  if (!data.gtin) { alert('商品コードが読み取れていません'); return; }
+  if (!data.name) { alert('商品名を入力してください'); return; }
+
+  const btn = document.getElementById('registerBtn');
+  const statusEl = document.getElementById('registerStatus');
+  btn.disabled = true;
+  btn.textContent = '登録中...';
+  statusEl.style.display = 'block';
+
+  // GAS URLが設定されている場合はAPIに送信
+  if (GAS_URL) {
+    try {
+      await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      statusEl.className = 'text-center text-sm text-emerald-700 font-medium';
+      statusEl.textContent = '✅ スプレッドシートに保存しました';
+      addLog('📤 GAS送信成功: ' + data.gtin);
+    } catch (e) {
+      statusEl.className = 'text-center text-sm text-red-600';
+      statusEl.textContent = '❌ 送信エラー: ' + e.message;
+      addLog('❌ GAS送信失敗: ' + e.message);
+    }
+  } else {
+    // GAS未設定時はローカル保存
+    statusEl.className = 'text-center text-sm text-amber-600';
+    statusEl.textContent = '⚠️ GAS未設定のためローカルに保存しました';
+    addLog('💾 ローカル保存: ' + data.gtin);
+  }
+
+  // リストに追加
+  registeredList.unshift(data);
+  renderList();
+
+  btn.disabled = false;
+  btn.textContent = '✅ 登録する（スプレッドシートに保存）';
+
+  // 2秒後にフォームリセット
+  setTimeout(() => {
+    document.getElementById('formCard').style.display = 'none';
+    document.getElementById('hintCard').style.display = 'block';
+    statusEl.style.display = 'none';
+    lastRaw = ''; // 次のスキャンを許可
+  }, 2000);
+}
+
+// =============================================
+// リスト表示
+// =============================================
+function renderList() {
+  const el = document.getElementById('listItems');
+  if (!registeredList.length) {
+    el.innerHTML = '<p class="text-center text-gray-400 text-sm py-8">登録データがありません</p>';
+    return;
+  }
+  el.innerHTML = registeredList.map((d, i) => {
+    const expColor = d.expiry && d.expiry !== '情報なし'
+      ? (new Date(d.expiry) < new Date() ? 'text-red-600' : 'text-emerald-700')
+      : 'text-gray-400';
+    return `
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+        <div class="flex justify-between items-start mb-2">
+          <div class="font-bold text-sm text-gray-800">${d.name || '（名称未入力）'}</div>
+          <span class="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">${d.cat1||''} ${d.cat2||''}</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div><span class="text-gray-400">GTIN：</span><span class="mono">${d.gtin}</span></div>
+          <div><span class="text-gray-400">数量：</span><span class="font-bold mono">${d.qty}</span></div>
+          <div><span class="text-gray-400">期限：</span><span class="mono font-medium ${expColor}">${d.expiry||'—'}</span></div>
+          <div><span class="text-gray-400">ロット：</span><span class="mono">${d.lot||'—'}</span></div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function clearList() {
+  if (confirm('リストをクリアしますか？')) {
+    registeredList = [];
+    renderList();
+  }
+}
+
+function exportCSV() {
+  if (!registeredList.length) { alert('データがありません'); return; }
+  const header = '登録日時,GTIN,商品名,数量,使用期限,剤形,規制区分,ロット番号\n';
+  const rows = registeredList.map(d =>
+    `"${d.timestamp}","${d.gtin}","${d.name}","${d.qty}","${d.expiry}","${d.cat1}","${d.cat2}","${d.lot}"`
+  ).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\uFEFF'+header+rows], {type:'text/csv;charset=utf-8;'}));
+  a.download = `在庫スキャン_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+// =============================================
+// タブ切替
+// =============================================
+function showTab(name) {
+  ['scan','list','log'].forEach(t => {
+    document.getElementById(`tab-${t}-content`).style.display = t === name ? 'block' : 'none';
+    const btn = document.getElementById(`tab-${t}`);
+    btn.className = t === name
+      ? 'flex-1 py-3 text-sm font-medium text-emerald-700 border-b-2 border-emerald-600'
+      : 'flex-1 py-3 text-sm font-medium text-gray-400 border-b-2 border-transparent';
+  });
+}
+</script>
+</body>
+</html>
