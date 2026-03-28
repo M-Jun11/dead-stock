@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GS1スキャン v6 ズーム対応</title>
+<style>
+  body{font-family:sans-serif;padding:12px;background:#0f172a;color:#e2e8f0;max-width:500px;margin:0 auto}
+  h2{color:#4ade80;margin-bottom:4px;font-size:16px}
+  p{font-size:11px;color:#64748b;margin-bottom:8px}
+  #videoWrap{position:relative;background:#000;border-radius:10px;overflow:hidden;margin-bottom:8px}
+  #video{width:100%;display:block;max-height:300px;object-fit:cover}
+  #overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+  .guide{width:88%;height:90px;border:2.5px solid #4ade80;border-radius:4px;box-shadow:0 0 0 9999px rgba(0,0,0,0.5);position:relative}
+  .line{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#f87171,transparent);animation:scan 2s ease-in-out infinite}
+  @keyframes scan{0%,100%{top:5%}50%{top:88%}}
+
+  /* ズームコントロール */
+  .zoom-panel{background:#1e293b;border-radius:8px;padding:12px;margin-bottom:8px}
+  .zoom-label{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .zoom-label span{font-size:12px;color:#94a3b8}
+  .zoom-val{font-size:18px;font-weight:bold;color:#4ade80;font-family:monospace}
+  input[type=range]{width:100%;height:6px;accent-color:#4ade80;cursor:pointer}
+  .zoom-btns{display:flex;gap:6px;margin-top:8px}
+  .zoom-btns button{flex:1;padding:8px;font-size:13px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;border-radius:6px;cursor:pointer}
+  .zoom-btns button:active{background:#1e293b}
+  .zoom-support{font-size:10px;color:#64748b;margin-top:4px;text-align:center}
+
+  button.main{width:100%;padding:13px;margin:4px 0;font-size:15px;border:none;border-radius:8px;cursor:pointer;font-family:sans-serif;font-weight:bold}
+  #startBtn{background:#16a34a;color:#fff}
+  #stopBtn{background:#dc2626;color:#fff;display:none}
+
+  /* スキャン間隔設定 */
+  .scan-settings{background:#1e293b;border-radius:8px;padding:10px;margin-bottom:8px;font-size:12px}
+  .scan-settings label{color:#94a3b8;display:block;margin-bottom:4px}
+  .scan-settings select{background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px 8px;border-radius:6px;font-size:12px;width:100%}
+
+  .result-box{background:#1e293b;border-radius:8px;padding:14px;margin:8px 0;font-size:13px;word-break:break-all;min-height:60px}
+  .result-box.success{border:2px solid #4ade80}
+  .result-box.waiting{border:1px solid #334155;color:#64748b}
+  #log{background:#020617;border-radius:8px;padding:10px;height:150px;overflow-y:auto;font-family:monospace;font-size:11px;color:#94a3b8;white-space:pre-wrap;word-break:break-all;margin-top:8px}
+  .ok{color:#4ade80}.err{color:#f87171}.info{color:#60a5fa}.warn{color:#fbbf24}
+</style>
+</head>
+<body>
+
+<h2>📷 GS1スキャン v6（ズーム対応）</h2>
+<p>小さい2段バーコード対応 — ズームで拡大してスキャン</p>
+
+<div id="videoWrap">
+  <video id="video" autoplay muted playsinline webkit-playsinline></video>
+  <div id="overlay" style="display:none">
+    <div class="guide"><div class="line"></div></div>
+  </div>
+</div>
+
+<!-- ズームコントロール -->
+<div class="zoom-panel" id="zoomPanel" style="display:none">
+  <div class="zoom-label">
+    <span>🔍 ズーム倍率</span>
+    <span class="zoom-val" id="zoomVal">1.0×</span>
+  </div>
+  <input type="range" id="zoomSlider" min="1" max="8" step="0.1" value="1"
+    oninput="applyZoom(this.value)">
+  <div class="zoom-btns">
+    <button onclick="applyZoom(1)">×1</button>
+    <button onclick="applyZoom(2)">×2</button>
+    <button onclick="applyZoom(3)">×3</button>
+    <button onclick="applyZoom(4)">×4</button>
+    <button onclick="applyZoom(6)">×6</button>
+    <button onclick="applyZoom(8)">×8</button>
+  </div>
+  <div class="zoom-support" id="zoomSupport"></div>
+</div>
+
+<!-- スキャン設定 -->
+<div class="scan-settings">
+  <label>スキャン間隔（短いほど高頻度・バッテリー消費大）</label>
+  <select id="scanInterval">
+    <option value="50">50ms（高頻度）</option>
+    <option value="100" selected>100ms（推奨）</option>
+    <option value="200">200ms</option>
+    <option value="500">500ms（省電力）</option>
+  </select>
+</div>
+
+<button class="main" id="startBtn" onclick="start()">▶ スキャン開始</button>
+<button class="main" id="stopBtn" onclick="stop()">■ 停止</button>
+
+<div class="result-box waiting" id="result">スキャン結果がここに表示されます</div>
+
+<div style="font-size:11px;color:#64748b;margin-top:6px">デバッグログ</div>
+<div id="log">待機中...</div>
+
+<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
+<script>
+let reader = null;
+let currentStream = null;
+let currentTrack = null;
+let zoomSupported = false;
+let zoomMin = 1, zoomMax = 8;
+
+function log(msg, cls='info'){
+  const el=document.getElementById('log');
+  const t=new Date().toLocaleTimeString('ja-JP');
+  el.innerHTML=`<span class="${cls}">[${t}] ${msg}</span>\n`+el.innerHTML;
+}
+
+// ===== ズーム適用 =====
+async function applyZoom(val){
+  val = parseFloat(val);
+  document.getElementById('zoomSlider').value = val;
+  document.getElementById('zoomVal').textContent = val.toFixed(1) + '×';
+
+  if(!currentTrack){
+    log('カメラが起動していません','warn');
+    return;
+  }
+
+  // ① ImageCapture API でズーム（Android Chrome対応）
+  try{
+    if(typeof ImageCapture !== 'undefined'){
+      const ic = new ImageCapture(currentTrack);
+      const caps = await ic.getPhotoCapabilities().catch(()=>null);
+      if(caps && caps.zoom){
+        await currentTrack.applyConstraints({advanced:[{zoom: val}]});
+        log(`ImageCapture ズーム適用: ×${val}`, 'ok');
+        return;
+      }
+    }
+  } catch(e){
+    log('ImageCapture zoom失敗: '+e.message, 'warn');
+  }
+
+  // ② track.applyConstraints でズーム
+  try{
+    await currentTrack.applyConstraints({advanced:[{zoom: val}]});
+    log(`constraints ズーム適用: ×${val}`, 'ok');
+    return;
+  } catch(e){
+    log('constraints zoom失敗: '+e.message, 'warn');
+  }
+
+  // ③ CSS transformでソフトウェアズーム（フォールバック）
+  const video = document.getElementById('video');
+  video.style.transform = `scale(${val})`;
+  video.style.transformOrigin = 'center center';
+  log(`CSSソフトウェアズーム適用: ×${val}`, 'warn');
+}
+
+// ===== ズーム範囲チェック =====
+async function checkZoomSupport(track){
+  const el = document.getElementById('zoomSupport');
+  try{
+    const caps = track.getCapabilities();
+    if(caps.zoom){
+      zoomMin = caps.zoom.min || 1;
+      zoomMax = caps.zoom.max || 8;
+      zoomSupported = true;
+      document.getElementById('zoomSlider').min = zoomMin;
+      document.getElementById('zoomSlider').max = zoomMax;
+      el.textContent = `ハードウェアズーム対応 (×${zoomMin}〜×${zoomMax.toFixed(1)})`;
+      el.style.color = '#4ade80';
+      log(`ハードウェアズーム対応: ×${zoomMin}〜×${zoomMax.toFixed(1)}`, 'ok');
+    } else {
+      zoomSupported = false;
+      el.textContent = 'ハードウェアズーム非対応（CSSソフトウェアズームを使用）';
+      el.style.color = '#fbbf24';
+      log('ハードウェアズーム非対応 → CSSフォールバック', 'warn');
+    }
+  } catch(e){
+    zoomSupported = false;
+    el.textContent = 'ズーム情報取得失敗（CSSズームを使用）';
+    log('ズーム情報取得失敗: '+e.message, 'warn');
+  }
+}
+
+// ===== GS1解析 =====
+function parseGS1(raw){
+  const r={gtin:null,expiry:null,lot:null,raw};
+  const GS='\u001d';
+  if(raw.includes('(')){
+    for(const m of raw.matchAll(/\((\d{2,4})\)([^\(]*)/g)) applyAI(r,m[1],m[2].trim());
+    return r;
+  }
+  let s=raw.replace(/[\u001e\u00e8]/g,GS);
+  if(s.charCodeAt(0)===0x1D) s=s.slice(1);
+  let pos=0,g=0;
+  while(pos<s.length&&g++<20){
+    const a2=s.slice(pos,pos+2),a3=s.slice(pos,pos+3),a4=s.slice(pos,pos+4);
+    let ai=a2;
+    if(/^31[0-9]$/.test(a3)||/^32[0-9]$/.test(a3)) ai=a3;
+    if(/^310[0-9]$/.test(a4)) ai=a4;
+    pos+=ai.length;
+    const fl={'00':18,'01':14,'02':14,'11':6,'12':6,'13':6,'14':6,'15':6,'16':6,'17':6,'18':6,'19':6,'20':2}[ai]??-1;
+    let val;
+    if(fl>0){val=s.slice(pos,pos+fl);pos+=fl;}
+    else{const gi=s.indexOf(GS,pos);if(gi===-1){val=s.slice(pos);pos=s.length;}else{val=s.slice(pos,gi);pos=gi+1;}}
+    applyAI(r,ai,val);
+  }
+  return r;
+}
+function applyAI(r,ai,val){
+  if(ai==='01') r.gtin=val.replace(/\D/g,'');
+  if(ai==='17'&&val.length>=6){
+    const yy=parseInt(val.slice(0,2)),mm=parseInt(val.slice(2,4)),dd=parseInt(val.slice(4,6));
+    const yyyy=yy+(yy<50?2000:1900);
+    const day=dd===0?new Date(yyyy,mm,0).getDate():dd;
+    r.expiry=`${yyyy}/${String(mm).padStart(2,'0')}/${String(day).padStart(2,'0')}`;
+  }
+  if(ai==='10') r.lot=val;
+}
+
+// ===== スキャン開始 =====
+async function start(){
+  document.getElementById('startBtn').style.display='none';
+  document.getElementById('stopBtn').style.display='block';
+  document.getElementById('overlay').style.display='flex';
+
+  const interval = parseInt(document.getElementById('scanInterval').value);
+  log(`ZXing初期化 (スキャン間隔: ${interval}ms)...`);
+
+  // ヒント設定
+  const hints=new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[
+    ZXing.BarcodeFormat.RSS_EXPANDED_STACKED,
+    ZXing.BarcodeFormat.RSS_EXPANDED,
+    ZXing.BarcodeFormat.RSS_14_STACK,
+    ZXing.BarcodeFormat.RSS_14_STACK_OMNIDIRECTIONAL,
+    ZXing.BarcodeFormat.CODE_128,
+    ZXing.BarcodeFormat.EAN_13,
+    ZXing.BarcodeFormat.EAN_8,
+    ZXing.BarcodeFormat.PDF_417,
+    ZXing.BarcodeFormat.DATA_MATRIX,
+    ZXing.BarcodeFormat.QR_CODE,
+  ]);
+  hints.set(ZXing.DecodeHintType.ASSUME_GS1, true);
+  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+
+  reader = new ZXing.BrowserMultiFormatReader(hints, {
+    delayBetweenScanAttempts: interval,
+    delayBetweenScanSuccess: 3000,
+  });
+
+  log('ZXing初期化完了', 'ok');
+
+  // ★ 高解像度カメラ起動
+  const constraints = {
+    video:{
+      facingMode: { ideal: 'environment' },
+      width:  { ideal: 1920, min: 1280 },
+      height: { ideal: 1080, min: 720 },
+      focusMode:        { ideal: 'continuous' },
+      exposureMode:     { ideal: 'continuous' },
+      whiteBalanceMode: { ideal: 'continuous' },
+    }
+  };
+
+  log('カメラ起動中（1920×1080目標）...');
+  try{
+    // まず手動でカメラストリームを取得してトラック情報を確認
+    currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+    currentTrack = currentStream.getVideoTracks()[0];
+    const settings = currentTrack.getSettings();
+    log(`カメラ解像度: ${settings.width}×${settings.height}`, 'ok');
+    log(`フォーカスモード: ${settings.focusMode||'不明'}`, 'info');
+
+    // ズームサポート確認
+    await checkZoomSupport(currentTrack);
+    document.getElementById('zoomPanel').style.display='block';
+
+    // videoにストリームを設定
+    const video = document.getElementById('video');
+    video.srcObject = currentStream;
+    await video.play();
+
+    log('カメラ起動完了 ✅', 'ok');
+    log('ズームスライダーで拡大してバーコードをかざしてください', 'info');
+    log('推奨ズーム：×2〜×4（5mm以下のバーコードの場合）', 'warn');
+
+    // ZXingでスキャン開始（既存ストリームを使用）
+    await reader.decodeFromStream(
+      currentStream,
+      video,
+      (result, err) => {
+        if(result){
+          const raw = result.getText();
+          const fmt = result.getBarcodeFormat().toString();
+          const disp = raw.replace(/\u001d/g,'[GS]');
+          log(`✅ 読取成功!\n   形式: ${fmt}\n   RAW: ${disp}`, 'ok');
+
+          const p = parseGS1(raw);
+          let expColor='#94a3b8', expLabel='';
+          if(p.expiry){
+            const expDate = new Date(p.expiry.replace(/\//g,'-'));
+            const diff = (expDate - new Date()) / 86400000;
+            if(diff<0){expColor='#f87171';expLabel=` ⚠️ 期限切れ`;}
+            else if(diff<=90){expColor='#f87171';expLabel=` ⚠️ 残り${Math.floor(diff)}日`;}
+            else if(diff<=365){expColor='#fbbf24';expLabel=` 残り約${Math.floor(diff/30)}ヶ月`;}
+            else{expColor='#4ade80';expLabel=` 残り約${Math.floor(diff/365)}年`;}
+          }
+
+          const el = document.getElementById('result');
+          el.className='result-box success';
+          el.innerHTML=
+            `<div style="color:#4ade80;font-size:15px;font-weight:bold;margin-bottom:8px">✅ 読み取り成功！</div>`+
+            `<div><span style="color:#64748b;font-size:11px">形式：</span>${fmt}</div>`+
+            `<div><span style="color:#64748b;font-size:11px">GTIN：</span><span style="font-family:monospace">${p.gtin||'—'}</span></div>`+
+            `<div><span style="color:#64748b;font-size:11px">有効期限：</span><span style="font-family:monospace;color:${expColor}">${p.expiry||'—'}${expLabel}</span></div>`+
+            `<div><span style="color:#64748b;font-size:11px">ロット：</span><span style="font-family:monospace">${p.lot||'—'}</span></div>`+
+            `<div style="font-size:10px;color:#475569;margin-top:6px">RAW: ${disp}</div>`;
+        }
+        if(err && !(err instanceof ZXing.NotFoundException)){
+          log('⚠ ' + err.message, 'err');
+        }
+      }
+    );
+
+  } catch(e){
+    log('❌ エラー: ' + e.message, 'err');
+    stop();
+  }
+}
+
+// ===== 停止 =====
+function stop(){
+  if(reader){ reader.reset(); reader = null; }
+  if(currentStream){ currentStream.getTracks().forEach(t=>t.stop()); currentStream=null; }
+  currentTrack = null;
+
+  // CSSズームリセット
+  const video = document.getElementById('video');
+  video.style.transform = '';
+  video.srcObject = null;
+
+  document.getElementById('startBtn').style.display='block';
+  document.getElementById('stopBtn').style.display='none';
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('zoomPanel').style.display='none';
+  document.getElementById('zoomSlider').value = 1;
+  document.getElementById('zoomVal').textContent = '1.0×';
+  log('停止しました');
+}
+</script>
+</body>
+</html>
