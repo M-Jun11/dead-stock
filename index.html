@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>在庫管理 | 調剤薬局</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+  :root{
+    --bg:#f5f4f0;--surface:#fff;--surface2:#f0efe9;--border:#e2e0d8;--border2:#ccc9be;
+    --text:#1a1917;--text2:#6b6860;--text3:#9e9b93;
+    --accent:#2d5a3d;--accent-light:#e8f2eb;
+    --red:#c0392b;--red-light:#fdf0ee;--amber:#b7621a;--amber-light:#fdf5ec;
+    --blue:#1a4a8a;--blue-light:#eef3fb;
+    --radius:6px;--radius-lg:10px;--shadow:0 1px 3px rgba(0,0,0,0.08);
+    --shadow-lg:0 4px 16px rgba(0,0,0,0.12);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;min-height:100vh}
+  header{background:var(--accent);color:white;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,0.15)}
+  header h1{font-size:15px;font-weight:700;letter-spacing:0.05em}
+  header .sub{font-size:10px;opacity:0.75;font-family:'IBM Plex Mono',monospace}
+  .tabs{display:flex;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:52px;z-index:99;overflow-x:auto}
+  .tab{flex:1;min-width:56px;padding:10px 3px;text-align:center;font-size:11px;font-weight:500;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:all 0.15s}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+  .page{display:none;padding:12px 12px 80px}
+  .page.active{display:block}
+
+  /* スキャン */
+  #videoWrap{position:relative;background:#000;border-radius:var(--radius-lg);overflow:hidden;margin-bottom:8px}
+  #video{width:100%;display:block;max-height:260px;object-fit:cover}
+  #guideBox{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:80%;height:120px;border:2.5px solid #4ade80;border-radius:4px;box-shadow:0 0 0 9999px rgba(0,0,0,0.5);pointer-events:none;display:none}
+  .scanline{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#f87171,transparent);animation:sl 1.8s ease-in-out infinite}
+  @keyframes sl{0%,100%{top:5%}50%{top:88%}}
+  .scan-ctrl{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);padding:10px 12px;margin-bottom:8px;box-shadow:var(--shadow)}
+  .ctrl-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .ctrl-row:last-child{margin-bottom:0}
+  .ctrl-label{font-size:11px;color:var(--text2);white-space:nowrap;min-width:64px}
+  input[type=range]{flex:1;height:4px;accent-color:var(--accent)}
+  .ctrl-val{font-size:12px;font-family:'IBM Plex Mono',monospace;color:var(--accent);min-width:36px;text-align:right}
+  .ctrl-sel{font-family:'Noto Sans JP',sans-serif;font-size:12px;padding:4px 8px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);flex:1}
+  .mode-btns{display:flex;gap:4px;flex-wrap:wrap}
+  .mbtn{padding:4px 10px;font-size:11px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text2);cursor:pointer;font-family:'Noto Sans JP',sans-serif}
+  .mbtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-light)}
+  .scan-btns{display:flex;gap:8px;margin-bottom:8px}
+  .btn-start{flex:1;padding:13px;background:var(--accent);color:white;border:none;border-radius:var(--radius-lg);font-size:15px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif}
+  .btn-stop{flex:1;padding:13px;background:var(--red);color:white;border:none;border-radius:var(--radius-lg);font-size:15px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif;display:none}
+  #scanStatus{font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--text3);text-align:center;margin-bottom:8px;min-height:16px}
+  .scan-result{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);padding:12px 14px;box-shadow:var(--shadow);margin-bottom:8px;animation:fadeIn 0.2s ease;display:none}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .scan-result.ok{border-left:4px solid var(--accent)}
+  .scan-result.warn{border-left:4px solid var(--amber)}
+  .scan-result.danger{border-left:4px solid var(--red)}
+  .scan-result.unknown{border-left:4px solid var(--border2)}
+  .sr-title{font-size:10px;color:var(--text3);font-family:'IBM Plex Mono',monospace;margin-bottom:4px;letter-spacing:0.06em;text-transform:uppercase}
+  .sr-name{font-size:14px;font-weight:700;margin-bottom:4px;line-height:1.4}
+  .sr-exp{font-size:22px;font-weight:700;font-family:'IBM Plex Mono',monospace;margin:2px 0}
+  .sr-exp.ok{color:var(--accent)}.sr-exp.warn{color:var(--amber)}.sr-exp.danger{color:var(--red)}.sr-exp.unknown{color:var(--text3)}
+  .sr-label{font-size:11px;color:var(--text2);margin-bottom:6px}
+  .sr-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-top:6px}
+  .sr-item{background:var(--bg);border-radius:var(--radius);padding:6px 8px}
+  .sr-ilabel{font-size:9px;color:var(--text3);letter-spacing:0.04em;text-transform:uppercase}
+  .sr-ival{font-size:11px;font-weight:500;font-family:'IBM Plex Mono',monospace;margin-top:1px}
+  .sr-ival.neg{color:var(--red)}
+  .sr-raw{font-size:10px;font-family:'IBM Plex Mono',monospace;color:var(--text3);margin-top:6px;word-break:break-all;padding:4px 6px;background:var(--surface2);border-radius:var(--radius)}
+
+  /* 共通カード */
+  .sgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px}
+  @media(min-width:560px){.sgrid{grid-template-columns:repeat(4,1fr)}}
+  .metric{background:var(--surface);border-radius:var(--radius);padding:12px;border:1px solid var(--border);box-shadow:var(--shadow);cursor:pointer}
+  .metric:active{background:var(--surface2)}
+  .mlabel{font-size:10px;color:var(--text3);letter-spacing:0.06em;font-weight:500;text-transform:uppercase}
+  .mval{font-size:20px;font-weight:700;margin-top:2px;font-family:'IBM Plex Mono',monospace}
+  .mval.red{color:var(--red)}.mval.amber{color:var(--amber)}.mval.green{color:var(--accent)}
+  .alert-list{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+  .alert-item{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);padding:12px 14px;box-shadow:var(--shadow);display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  .alert-item.danger{border-left:4px solid var(--red)}
+  .alert-item.warn{border-left:4px solid var(--amber)}
+  .alert-name{font-size:13px;font-weight:500;line-height:1.4;flex:1}
+  .alert-detail{font-size:11px;color:var(--text2);margin-top:2px;font-family:'IBM Plex Mono',monospace}
+  .alert-badges{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0}
+  .badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:99px;font-weight:500;margin:1px}
+  .b-red{background:var(--red-light);color:var(--red)}
+  .b-amber{background:var(--amber-light);color:var(--amber)}
+  .b-blue{background:var(--blue-light);color:var(--blue)}
+
+  /* 検索 */
+  .search-wrap{position:relative;margin-bottom:14px}
+  .search-input{width:100%;padding:14px 48px 14px 16px;font-size:16px;font-family:'Noto Sans JP',sans-serif;border:2px solid var(--border2);border-radius:var(--radius-lg);background:var(--surface);color:var(--text);outline:none;transition:border-color 0.15s;-webkit-appearance:none}
+  .search-input:focus{border-color:var(--accent)}
+  .search-clear{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;display:none;padding:4px;line-height:1}
+  .suggest-list{position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius-lg) var(--radius-lg);box-shadow:var(--shadow-lg);z-index:200;max-height:300px;overflow-y:auto;display:none}
+  .suggest-item{padding:12px 14px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .suggest-item:last-child{border-bottom:none}
+  .suggest-item:active{background:var(--accent-light)}
+  .suggest-name{font-size:13px;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .suggest-name em{color:var(--accent);font-style:normal;font-weight:700}
+  .suggest-sub{font-size:11px;color:var(--text3);margin-top:1px}
+  .detail-card{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);padding:18px;box-shadow:var(--shadow);margin-bottom:14px;animation:fadeIn 0.2s ease}
+  .detail-card.ok{border-left:4px solid var(--accent)}
+  .detail-card.warn{border-left:4px solid var(--amber)}
+  .detail-card.danger{border-left:4px solid var(--red)}
+  .detail-card.none{border-left:4px solid var(--border2)}
+  .dexp{font-size:26px;font-weight:700;font-family:'IBM Plex Mono',monospace;margin:4px 0 2px}
+  .dexp.ok{color:var(--accent)}.dexp.warn{color:var(--amber)}.dexp.danger{color:var(--red)}.dexp.none{color:var(--text3)}
+  .sec-title{font-size:12px;font-weight:500;color:var(--text2);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
+  .hist-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+  .hist-chip{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:var(--surface);border:1px solid var(--border);border-radius:99px;font-size:12px;cursor:pointer;max-width:210px}
+  .hist-chip:active{background:var(--accent-light);border-color:var(--accent)}
+  .hchip-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hchip-exp{font-size:10px;font-family:'IBM Plex Mono',monospace;flex-shrink:0}
+  .hchip-exp.ok{color:var(--accent)}.hchip-exp.warn{color:var(--amber)}.hchip-exp.danger{color:var(--red)}
+
+  /* 一覧 */
+  .filters{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);padding:12px;margin-bottom:10px;display:flex;flex-wrap:wrap;gap:8px;box-shadow:var(--shadow)}
+  .filters input,.filters select{font-family:'Noto Sans JP',sans-serif;font-size:12px;padding:6px 10px;height:32px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);outline:none}
+  .filters input{flex:1;min-width:130px}
+  .cbar{font-size:11px;color:var(--text3);font-family:'IBM Plex Mono',monospace;margin-bottom:6px}
+  .twrap{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);overflow-x:auto;box-shadow:var(--shadow);-webkit-overflow-scrolling:touch}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  thead th{background:var(--surface2);padding:8px 10px;text-align:left;font-weight:500;font-size:10px;color:var(--text2);border-bottom:1px solid var(--border);white-space:nowrap;letter-spacing:0.04em}
+  tbody td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle;white-space:nowrap}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover td{background:var(--surface2)}
+  .ncell{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .neg{color:var(--red);font-weight:700;font-family:'IBM Plex Mono',monospace}
+  .num{font-family:'IBM Plex Mono',monospace}
+  .muted{color:var(--text3)}.kr{color:var(--red);font-weight:500}.ka{color:var(--amber);font-weight:500}
+  .pager{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:14px;font-size:12px;color:var(--text2)}
+  .pager button{font-family:'Noto Sans JP',sans-serif;font-size:12px;padding:6px 14px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--surface);color:var(--text);cursor:pointer}
+  .pager button:disabled{opacity:0.35;cursor:default}
+  .empty{text-align:center;padding:40px;color:var(--text3);font-size:13px}
+
+  /* CSV */
+  .upload-card{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);padding:20px;box-shadow:var(--shadow);margin-bottom:14px;text-align:center}
+  .upload-label{display:inline-block;padding:12px 24px;background:var(--accent);color:white;border-radius:var(--radius-lg);font-size:14px;font-weight:700;cursor:pointer;margin-bottom:12px;font-family:'Noto Sans JP',sans-serif}
+
+  /* スキャン履歴 */
+  .hist-hdr{display:flex;align-items:center;justify-content:space-between;margin:4px 0 8px}
+  .hist-hdr span{font-size:12px;font-weight:500;color:var(--text2)}
+  .clrbtn{font-size:11px;padding:4px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface);color:var(--text2);cursor:pointer}
+  .hlist{display:flex;flex-direction:column;gap:6px}
+  .hitem{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:10px 12px;display:flex;align-items:center;justify-content:space-between}
+  .hname{font-size:12px;font-weight:500;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .htime{font-size:10px;color:var(--text3);margin-top:1px}
+  .hexp{font-size:12px;font-family:'IBM Plex Mono',monospace;font-weight:500;text-align:right}
+  .hexp.ok{color:var(--accent)}.hexp.warn{color:var(--amber)}.hexp.danger{color:var(--red)}
+  .emptymsg{text-align:center;padding:20px;color:var(--text3);font-size:12px}
+  #scanLog{background:#020617;border-radius:var(--radius-lg);padding:10px;height:120px;overflow-y:auto;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#94a3b8;white-space:pre-wrap;word-break:break-all;margin-top:8px;display:none}
+  .lok{color:#4ade80}.lerr{color:#f87171}.linfo{color:#60a5fa}.lwarn{color:#fbbf24}
+
+  .fab{display:none;position:fixed;bottom:20px;right:20px;background:var(--accent);color:white;border:none;border-radius:50px;padding:12px 20px;font-size:13px;font-family:'Noto Sans JP',sans-serif;font-weight:500;cursor:pointer;box-shadow:0 4px 16px rgba(45,90,61,0.35);z-index:200}
+  @media(max-width:599px){.fab{display:block}.filters{display:none}.filters.open{display:flex}}
+</style>
+</head>
+<body>
+
+<header>
+  <div><div class="sub">PHARMACY</div><h1>在庫管理システム</h1></div>
+  <div id="updatedDate" style="font-size:10px;opacity:0.7;font-family:'IBM Plex Mono',monospace;text-align:right">データ未読込</div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('home')">🏠 ホーム</div>
+  <div class="tab" onclick="switchTab('scan')">📷 スキャン</div>
+  <div class="tab" onclick="switchTab('search')">🔍 検索</div>
+  <div class="tab" onclick="switchTab('fudo')">📋 不動</div>
+  <div class="tab" onclick="switchTab('ippan')">📦 一般</div>
+  <div class="tab" onclick="switchTab('csv')">📁 更新</div>
+</div>
+
+<!-- ホーム -->
+<div class="page active" id="page-home">
+  <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">📋 不動在庫（6ヶ月以上）</div>
+  <div class="sgrid" id="summFudo"></div>
+  <div id="alertFudo"></div>
+  <div style="font-size:12px;font-weight:700;color:var(--text2);margin:16px 0 8px">📦 一般在庫（全体）</div>
+  <div class="sgrid" id="summIppan"></div>
+  <div id="alertIppan"></div>
+</div>
+
+<!-- スキャン -->
+<div class="page" id="page-scan">
+  <div id="videoWrap">
+    <video id="video" autoplay muted playsinline webkit-playsinline></video>
+    <div id="guideBox"><div class="scanline"></div></div>
+  </div>
+
+  <!-- スキャン結果をカメラ直下に配置 -->
+  <div id="scanStatus">スタートボタンを押してください</div>
+  <div class="scan-result" id="scanResult"></div>
+
+  <div class="scan-ctrl">
+    <div class="ctrl-row">
+      <span class="ctrl-label">🔍 ズーム</span>
+      <input type="range" id="zoomSlider" min="1" max="8" step="0.5" value="4" oninput="applyZoom(this.value);saveSettings()">
+      <span class="ctrl-val" id="zoomVal">×4.0</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-label">📐 枠の幅</span>
+      <input type="range" id="frameSlider" min="20" max="95" step="5" value="80" oninput="adjustFrame();saveSettings()">
+      <span class="ctrl-val" id="frameVal">80%</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-label">↕ 枠の高さ</span>
+      <input type="range" id="heightSlider" min="30" max="250" step="5" value="185" oninput="adjustFrame();saveSettings()">
+      <span class="ctrl-val" id="heightVal">185px</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-label">⏱ 間隔</span>
+      <select class="ctrl-sel" id="interval" onchange="saveSettings()">
+        <option value="100" selected>100ms</option>
+        <option value="200">200ms</option>
+        <option value="300">300ms（省電力）</option>
+      </select>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-label">モード</span>
+      <div class="mode-btns">
+        <button class="mbtn on" id="tog-barcode" onclick="toggleMode('barcode')">バーコード</button>
+        <button class="mbtn on" id="tog-ocr" onclick="toggleMode('ocr')">OCR★</button>
+        <button class="mbtn" id="tog-preview" onclick="toggleMode('preview')">プレビュー</button>
+        <button class="mbtn" id="tog-log" onclick="toggleMode('log')">ログ</button>
+      </div>
+    </div>
+  </div>
+  <div class="scan-btns">
+    <button class="btn-start" id="startBtn" onclick="startScan()">📷 スキャン開始</button>
+    <button class="btn-stop" id="stopBtn" onclick="stopScan()">■ 停止</button>
+  </div>
+  <div class="hist-hdr"><span>スキャン履歴</span><button class="clrbtn" onclick="clearScanHist()">クリア</button></div>
+  <div class="hlist" id="scanHistList"><div class="emptymsg">スキャン履歴はありません</div></div>
+  <div id="scanLog"></div>
+</div>
+
+<!-- 検索 -->
+<div class="page" id="page-search">
+  <div class="search-wrap">
+    <input class="search-input" id="searchInput" type="search" placeholder="品名・コードを入力…" autocomplete="off" oninput="onSearch()" onfocus="onSFocus()" onblur="onSBlur()">
+    <button class="search-clear" id="searchClear" onclick="clearSearch()">×</button>
+    <div class="suggest-list" id="suggestList"></div>
+  </div>
+  <div id="detailArea"></div>
+  <div id="histSection">
+    <div class="sec-title"><span>最近検索した薬品</span><button class="clrbtn" onclick="clearSearchHist()">クリア</button></div>
+    <div class="hist-chips" id="histChips"><div style="font-size:12px;color:var(--text3)">検索履歴はありません</div></div>
+  </div>
+</div>
+
+<!-- 不動在庫一覧 -->
+<div class="page" id="page-fudo">
+  <div style="font-size:12px;color:var(--text2);margin-bottom:8px;padding:8px 12px;background:var(--red-light);border-radius:var(--radius);border-left:3px solid var(--red)">
+    不動月数 <strong>6ヶ月以上</strong> の在庫
+  </div>
+  <div class="filters" id="fudoFilters">
+    <input type="search" id="fq" placeholder="品名・コードで検索…" oninput="goFudo()">
+    <select id="falt" onchange="goFudo()">
+      <option value="">全アラート</option>
+      <option value="neg">マイナス在庫</option><option value="kei">経過措置あり</option>
+      <option value="dis">発売中止あり</option><option value="exp">有効期限1年以内</option><option value="spc">規制薬</option>
+    </select>
+    <select id="fsrt" onchange="goFudo()">
+      <option value="stock_d">在庫金額↓</option><option value="months_d">不動月数↓</option>
+      <option value="qty_d">数量↓</option><option value="name_a">品名↑</option>
+    </select>
+  </div>
+  <div class="cbar" id="fudoCbar"></div>
+  <div class="twrap">
+    <table style="min-width:700px">
+      <thead><tr>
+        <th>コード</th><th>品名</th><th>規制</th><th>数量</th><th>在庫金額</th>
+        <th>不動月数</th><th>最終処方日</th><th>有効期限</th><th>経過措置</th><th>発売中止</th><th>アラート</th>
+      </tr></thead>
+      <tbody id="fudoTb"></tbody>
+    </table>
+  </div>
+  <div class="pager">
+    <button id="fPrv" onclick="chgFudo(-1)">← 前へ</button>
+    <span id="fPi"></span>
+    <button id="fNxt" onclick="chgFudo(1)">次へ →</button>
+  </div>
+</div>
+
+<!-- 一般在庫一覧 -->
+<div class="page" id="page-ippan">
+  <div style="font-size:12px;color:var(--text2);margin-bottom:8px;padding:8px 12px;background:var(--accent-light);border-radius:var(--radius);border-left:3px solid var(--accent)">
+    全在庫（不動月数 <strong>6ヶ月未満</strong> を含む）
+  </div>
+  <div class="filters" id="ippanFilters">
+    <input type="search" id="iq" placeholder="品名・コードで検索…" oninput="goIppan()">
+    <select id="ialt" onchange="goIppan()">
+      <option value="">全アラート</option>
+      <option value="neg">マイナス在庫</option><option value="exp">有効期限1年以内</option>
+      <option value="kei">経過措置あり</option><option value="dis">発売中止あり</option>
+    </select>
+    <select id="isrt" onchange="goIppan()">
+      <option value="stock_d">在庫金額↓</option><option value="yakka_d">薬価在庫金額↓</option>
+      <option value="qty_d">数量↓</option><option value="months_d">不動月数↓</option>
+      <option value="name_a">品名↑</option>
+    </select>
+  </div>
+  <div class="cbar" id="ippanCbar"></div>
+  <div class="twrap">
+    <table style="min-width:800px">
+      <thead><tr>
+        <th>コード</th><th>品名</th><th>数量</th><th>単価</th><th>在庫金額</th>
+        <th>薬価</th><th>薬価在庫金額</th><th>不動月数</th><th>有効期限</th><th>発注点</th><th>アラート</th>
+      </tr></thead>
+      <tbody id="ippanTb"></tbody>
+    </table>
+  </div>
+  <div class="pager">
+    <button id="iPrv" onclick="chgIppan(-1)">← 前へ</button>
+    <span id="iPi"></span>
+    <button id="iNxt" onclick="chgIppan(1)">次へ →</button>
+  </div>
+</div>
+
+<!-- CSV更新 -->
+<div class="page" id="page-csv">
+  <div class="upload-card">
+    <div style="font-size:14px;font-weight:700;margin-bottom:8px">📁 CSVファイルを読み込む</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:16px">
+      毎週のCSVをアップロードするだけで<br>不動在庫・一般在庫の両方が自動更新されます
+    </div>
+    <label class="upload-label" for="csvInput">CSVファイルを選択</label>
+    <input type="file" id="csvInput" accept=".csv" style="display:none" onchange="loadCSV(event)">
+    <div style="font-size:12px;color:var(--text3)">
+      不動在庫（6ヶ月以上）と一般在庫に自動振り分けされます
+    </div>
+  </div>
+  <div id="uploadStatus"></div>
+
+  <!-- GitHubダウンロードボタン -->
+  <div id="downloadSection">
+    <div style="background:var(--blue-light);border:1px solid #b0c4e8;border-radius:var(--radius-lg);padding:16px;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:6px">📤 GitHubへアップロードする</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.7">
+        ① 上でCSVを読み込む<br>
+        ② 下のボタンでindex.htmlをダウンロード<br>
+        ③ GitHubのdead-stockリポジトリを開く<br>
+        ④ 既存のindex.htmlを削除してアップロード<br>
+        ⑤ iPhoneから最新データが見られるようになります
+      </div>
+      <button onclick="downloadHTML()" style="width:100%;padding:13px;background:var(--blue);color:white;border:none;border-radius:var(--radius-lg);font-size:15px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif">
+        ⬇️ index.htmlをダウンロード
+      </button>
+      <div id="dlStatus" style="font-size:11px;color:var(--text3);text-align:center;margin-top:8px"></div>
+    </div>
+  </div>
+
+  <div style="background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);padding:16px;box-shadow:var(--shadow)">
+    <div style="font-size:13px;font-weight:700;margin-bottom:10px">📋 対応CSV列名</div>
+    <div style="font-size:11px;color:var(--text2);line-height:1.9;font-family:'IBM Plex Mono',monospace">
+      明細コード / 品名 / 単価 / 薬価 / 理論在庫<br>
+      在庫金額 / 薬価在庫金額 / 不動月数 / 発注点<br>
+      有効期限 / 経過措置日 / 発売中止日<br>
+      劇薬 / 毒薬 / 向精神薬 / 先発/後発
+    </div>
+  </div>
+</div>
+
+<button class="fab" id="fabBtn">☰ フィルター</button>
+
+<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
+<script src="https://unpkg.com/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
+<script>
+const TODAY = new Date('2026-03-23');
+const FUDO_MONTHS = 6; // 不動在庫の基準月数
+let ALL_DATA = []; // 全データ
+let FUDO_DATA = []; // 不動在庫（6ヶ月以上）
+let IPPAN_DATA = []; // 一般在庫（全体）
+
+// ===== ユーティリティ =====
+function pd(s){
+  if(!s||s==='-'||s==='－') return null;
+  const p=s.replace(/－/g,'-').split('/');
+  if(p.length===2) return new Date(parseInt(p[0]),parseInt(p[1])-1,1);
+  if(p.length===3) return new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));
+  return null;
+}
+function expSt(s){
+  const d=pd(s);
+  if(!d) return{cls:'none',label:'有効期限情報なし',str:'—'};
+  const diff=(d-TODAY)/(1000*60*60*24);
+  if(diff<0) return{cls:'danger',label:`期限切れ（${Math.abs(Math.floor(diff))}日経過）`,str:s};
+  if(diff<=90) return{cls:'danger',label:`残り${Math.floor(diff)}日 ⚠️`,str:s};
+  if(diff<=365) return{cls:'warn',label:`残り約${Math.floor(diff/30)}ヶ月`,str:s};
+  return{cls:'ok',label:`残り約${Math.floor(diff/365)}年${Math.floor((diff%365)/30)}ヶ月`,str:s};
+}
+function getAl(r){
+  const a=[];
+  if(r.qty<0) a.push({cls:'b-red',txt:'マイナス在庫'});
+  if(r.keika&&r.keika!=='-'){const d=pd(r.keika);if(d&&d<=TODAY)a.push({cls:'b-red',txt:'経過措置切れ'});else if(d)a.push({cls:'b-amber',txt:'経過措置あり'});}
+  if(r.hanbai&&r.hanbai!=='-') a.push({cls:'b-amber',txt:'発売中止'});
+  if(r.exp&&r.exp!=='-'){const d=pd(r.exp);if(d){const m=(d-TODAY)/(1000*60*60*24*30);if(m>=0&&m<=12)a.push({cls:'b-amber',txt:'期限1年以内'});if(m<0)a.push({cls:'b-red',txt:'期限切れ'});}}
+  return a;
+}
+function getRawMonths(rawM){
+  if(!rawM||rawM==='-') return 0;
+  const m=String(rawM).match(/^(\d+)/);
+  return m?parseInt(m[1]):0;
+}
+function findByGTIN(gtin){
+  if(!gtin) return null;
+  return ALL_DATA.find(d=>d.code&&(gtin.includes(d.code)||gtin===d.code));
+}
+
+// ===== タブ =====
+const TABS=['home','scan','search','fudo','ippan','csv'];
+let currentTab='home';
+function switchTab(t){
+  currentTab=t;
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',TABS[i]===t));
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+t).classList.add('active');
+  if(t==='home') renderHome();
+  if(t==='fudo') renderFudo();
+  if(t==='ippan') renderIppan();
+  if(t==='scan'&&!scanning) document.getElementById('guideBox').style.display='none';
+  // FABの表示制御
+  const fabBtn=document.getElementById('fabBtn');
+  if(t==='fudo'){fabBtn.style.display='block';fabBtn.onclick=()=>document.getElementById('fudoFilters').classList.toggle('open');}
+  else if(t==='ippan'){fabBtn.style.display='block';fabBtn.onclick=()=>document.getElementById('ippanFilters').classList.toggle('open');}
+  else fabBtn.style.display='none';
+}
+
+// ===== ホーム =====
+function renderHome(){
+  renderSummary('summFudo','alertFudo',FUDO_DATA,'不動在庫','fudo');
+  renderSummary('summIppan','alertIppan',IPPAN_DATA,'一般在庫','ippan');
+}
+
+function renderSummary(summId,alertId,data,label,tab){
+  const ts=data.filter(d=>d.stock>0).reduce((s,d)=>s+d.stock,0);
+  const danger=data.filter(d=>getAl(d).some(a=>a.cls==='b-red'));
+  const warn=data.filter(d=>getAl(d).some(a=>a.cls==='b-amber')&&!getAl(d).some(a=>a.cls==='b-red'));
+  document.getElementById(summId).innerHTML=`
+    <div class="metric" onclick="switchTab('${tab}')"><div class="mlabel">品目数</div><div class="mval green">${data.length}</div></div>
+    <div class="metric" onclick="switchTab('${tab}')"><div class="mlabel">在庫金額合計</div><div class="mval">${ts.toLocaleString()}円</div></div>
+    <div class="metric"><div class="mlabel">緊急対応</div><div class="mval red">${danger.length}品目</div></div>
+    <div class="metric"><div class="mlabel">要注意</div><div class="mval amber">${warn.length}品目</div></div>
+  `;
+  const all=[...danger,...warn].slice(0,20);
+  if(!all.length){document.getElementById(alertId).innerHTML='<div class="emptymsg">アラートはありません ✅</div>';return;}
+  document.getElementById(alertId).innerHTML=
+    `<div style="font-size:12px;font-weight:500;color:var(--text2);margin-bottom:8px">要対応アラート（${all.length}件）</div>`+
+    `<div class="alert-list">${all.map(r=>{
+      const al=getAl(r);const isDanger=al.some(a=>a.cls==='b-red');
+      return`<div class="alert-item ${isDanger?'danger':'warn'}">
+        <div><div class="alert-name">${r.name}</div>
+        <div class="alert-detail">${r.stock.toLocaleString()}円　数量:${r.qty}　不動:${r.rawM}ヶ月</div></div>
+        <div class="alert-badges">${al.map(a=>`<span class="badge ${a.cls}">${a.txt}</span>`).join('')}</div>
+      </div>`;
+    }).join('')}</div>`;
+}
+
+// ===== スキャン =====
+let stream=null,track=null,scanning=false,frameTimer=null;
+let modeBarcode=true,modeOcr=true,modePreview=false,modeLog=false;
+let lastRaw='',lastTime=0,frameCount=0;
+let zxingReader=null,tesseractWorker=null,ocrBusy=false;
+let scanHist=[];
+const offCanvas=document.createElement('canvas');
+const offCtx=offCanvas.getContext('2d',{willReadFrequently:true});
+
+// ===== 設定の保存・復元 =====
+function saveSettings(){
+  const s={
+    zoom:document.getElementById('zoomSlider').value,
+    frame:document.getElementById('frameSlider').value,
+    height:document.getElementById('heightSlider').value,
+    interval:document.getElementById('interval').value,
+  };
+  localStorage.setItem('scanSettings',JSON.stringify(s));
+}
+function loadSettings(){
+  try{
+    const s=JSON.parse(localStorage.getItem('scanSettings')||'{}');
+    if(s.zoom){document.getElementById('zoomSlider').value=s.zoom;document.getElementById('zoomVal').textContent=`×${parseFloat(s.zoom).toFixed(1)}`;}
+    if(s.frame){document.getElementById('frameSlider').value=s.frame;document.getElementById('frameVal').textContent=s.frame+'%';}
+    if(s.height){document.getElementById('heightSlider').value=s.height;document.getElementById('heightVal').textContent=s.height+'px';}
+    if(s.interval){document.getElementById('interval').value=s.interval;}
+    adjustFrame();
+  }catch(e){}
+}
+
+function slog(msg,cls='linfo'){
+  if(!modeLog) return;
+  const el=document.getElementById('scanLog');
+  const t=new Date().toLocaleTimeString('ja-JP');
+  el.innerHTML=`<span class="${cls}">[${t}] ${msg}</span>\n`+el.innerHTML;
+}
+
+// GS1解析
+function parseGS1(raw){
+  const r={gtin:null,expiry:null,lot:null};
+  const GS='\u001d';
+  if(raw.includes('(')){
+    for(const m of raw.matchAll(/\((\d{2,4})\)([^\(\s]*)/g)) applyAI(r,m[1],m[2].trim());
+    return r;
+  }
+  let s=raw.replace(/[\u001e\u00e8]/g,GS);
+  if(s.charCodeAt(0)===0x1D) s=s.slice(1);
+  let pos=0,g=0;
+  while(pos<s.length&&g++<20){
+    const a2=s.slice(pos,pos+2),a3=s.slice(pos,pos+3),a4=s.slice(pos,pos+4);
+    let ai=a2;
+    if(/^31[0-9]$/.test(a3)||/^32[0-9]$/.test(a3)) ai=a3;
+    if(/^310[0-9]$/.test(a4)) ai=a4;
+    pos+=ai.length;
+    const fl={'00':18,'01':14,'02':14,'11':6,'12':6,'13':6,'14':6,'15':6,'16':6,'17':6,'18':6,'19':6,'20':2}[ai]??-1;
+    let val;
+    if(fl>0){val=s.slice(pos,pos+fl);pos+=fl;}
+    else{const gi=s.indexOf(GS,pos);if(gi===-1){val=s.slice(pos);pos=s.length;}else{val=s.slice(pos,gi);pos=gi+1;}}
+    applyAI(r,ai,val);
+  }
+  return r;
+}
+function applyAI(r,ai,val){
+  if(ai==='01') r.gtin=val.replace(/\D/g,'');
+  if(ai==='17'&&val.length>=6){
+    const yy=parseInt(val.slice(0,2)),mm=parseInt(val.slice(2,4)),dd=parseInt(val.slice(4,6));
+    const yyyy=yy+(yy<50?2000:1900);
+    const day=dd===0?new Date(yyyy,mm,0).getDate():dd;
+    r.expiry=`${yyyy}/${String(mm).padStart(2,'0')}/${String(day).padStart(2,'0')}`;
+  }
+  if(ai==='10') r.lot=val;
+}
+
+function parseOCRText(text){
+  const r={gtin:null,expiry:null,lot:null};
+  const clean=text.replace(/\bO(\d)/g,'0$1').replace(/(\d)O\b/g,'$10').replace(/[Il\|](?=\d)/g,'1').replace(/(?<=\d)[Il\|]/g,'1').replace(/\s+/g,' ').trim();
+  slog(`OCR: "${clean.slice(0,80)}"`, 'linfo');
+  const expM=clean.match(/\(?1[7]\)?[\s:\-]?(\d{6})/);
+  if(expM){
+    const val=expM[1];
+    const yy=parseInt(val.slice(0,2)),mm=parseInt(val.slice(2,4)),dd=parseInt(val.slice(4,6));
+    if(mm>=1&&mm<=12){
+      const yyyy=yy+(yy<50?2000:1900);
+      const day=dd===0?new Date(yyyy,mm,0).getDate():dd;
+      r.expiry=`${yyyy}/${String(mm).padStart(2,'0')}/${String(day).padStart(2,'0')}`;
+    }
+  }
+  const cleanNum=clean.replace(/[Oo]/g,'0').replace(/[Il\|]/g,'1');
+  const gtinPats=[/\(?01\)?[\s:\-]?(\d{14})/,/\(?0[1I]\)?[\s:\-]?(\d{14})/,/\(?[O0][1lI]\)?[\s:\-]?(\d{14})/,/01[\s]?(\d{14})/,/(\d{14})/];
+  for(const pat of gtinPats){const m=cleanNum.match(pat);if(m&&m[1].length===14){r.gtin=m[1];break;}}
+  if(!r.gtin){const m=cleanNum.match(/(\d{13})(?!\d)/);if(m) r.gtin='0'+m[1];}
+  if(!r.gtin){const seqs=[...cleanNum.matchAll(/\d{10,16}/g)].map(m=>m[0]);for(const s of seqs){if(s.length>=13&&s.length<=15){r.gtin=s.padStart(14,'0').slice(0,14);break;}}}
+  const lotPats=[/\(10\)([A-Z0-9]{2,20})/i,/\(?10\)?[\s:\-]([A-Z][A-Z0-9]{1,19})/i,/\(?10\)?[\s:\-]([A-Z0-9]{2,20})(?=[\s\(]|$)/i];
+  for(const pat of lotPats){const m=text.match(pat);if(m&&m[1]&&m[1]!==r.gtin&&m[1].length>=2){r.lot=m[1].trim();break;}}
+  return r;
+}
+
+function calcExpStatus(expiry){
+  if(!expiry) return{cls:'unknown',label:'有効期限情報なし'};
+  const diff=(new Date(expiry.replace(/\//g,'-'))-new Date())/86400000;
+  if(diff<0) return{cls:'danger',label:`期限切れ（${Math.abs(Math.floor(diff))}日経過）`};
+  if(diff<=90) return{cls:'danger',label:`残り${Math.floor(diff)}日 ⚠️`};
+  if(diff<=365) return{cls:'warn',label:`残り約${Math.floor(diff/30)}ヶ月`};
+  return{cls:'ok',label:`残り約${Math.floor(diff/365)}年${Math.floor((diff%365)/30)}ヶ月`};
+}
+
+function onScanResult(raw,fmt){
+  const now=Date.now();
+  if(raw===lastRaw&&now-lastTime<3000) return;
+  lastRaw=raw;lastTime=now;
+  const p=fmt==='OCR'?parseOCRText(raw):parseGS1(raw);
+  const drug=findByGTIN(p.gtin);
+  const expStat=calcExpStatus(p.expiry);
+  const al=drug?getAl(drug):[];
+  const time=new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
+  const isFudo=drug?getRawMonths(drug.rawM)>=FUDO_MONTHS:false;
+  const card=document.getElementById('scanResult');
+  card.className=`scan-result ${expStat.cls}`;
+  card.style.display='block';
+  card.innerHTML=
+    `<div class="sr-title">スキャン結果 (${fmt})${drug?(isFudo?' 📋不動在庫':' 📦一般在庫'):''}</div>`+
+    `<div class="sr-name">${drug?drug.name:'在庫リストに一致する薬品なし'}</div>`+
+    `<div class="sr-exp ${expStat.cls}">${p.expiry||'—'}</div>`+
+    `<div class="sr-label">${expStat.label}</div>`+
+    (drug?`<div class="sr-grid">
+      <div class="sr-item"><div class="sr-ilabel">在庫金額</div><div class="sr-ival">${drug.stock.toLocaleString()}円</div></div>
+      <div class="sr-item"><div class="sr-ilabel">数量</div><div class="sr-ival ${drug.qty<0?'neg':''}">${drug.qty}</div></div>
+      <div class="sr-item"><div class="sr-ilabel">単価</div><div class="sr-ival">${drug.tanka?drug.tanka.toLocaleString()+'円':'—'}</div></div>
+      <div class="sr-item"><div class="sr-ilabel">不動月数</div><div class="sr-ival">${drug.rawM}ヶ月</div></div>
+    </div>${al.length?`<div style="margin-top:8px">${al.map(a=>`<span class="badge ${a.cls}">${a.txt}</span>`).join('')}</div>`:''}`:'')+(
+    p.lot?`<div class="sr-raw">ロット：${p.lot}</div>`:'')+
+    (p.gtin?`<div class="sr-raw">GTIN：${p.gtin}</div>`:'');
+  scanHist.unshift({name:drug?drug.name:'不明',exp:p.expiry||'—',cls:expStat.cls,time});
+  if(scanHist.length>20) scanHist.pop();
+  renderScanHist();
+  document.getElementById('scanStatus').textContent='✅ 読み取り成功！';
+  slog(`✅ ${fmt} GTIN:${p.gtin||'—'} 期限:${p.expiry||'—'} ロット:${p.lot||'—'}`,'lok');
+}
+
+function renderScanHist(){
+  const el=document.getElementById('scanHistList');
+  if(!scanHist.length){el.innerHTML='<div class="emptymsg">スキャン履歴はありません</div>';return;}
+  el.innerHTML=scanHist.map(h=>`<div class="hitem"><div><div class="hname">${h.name}</div><div class="htime">${h.time}</div></div><div class="hexp ${h.cls}">${h.exp}</div></div>`).join('');
+}
+function clearScanHist(){scanHist=[];lastRaw='';renderScanHist();}
+
+// フレーム解析
+async function analyzeFrame(){
+  if(!scanning) return;
+  const video=document.getElementById('video');
+  if(video.readyState<video.HAVE_ENOUGH_DATA){scheduleNext();return;}
+  const W=video.videoWidth||1280,H=video.videoHeight||720;
+  offCanvas.width=W;offCanvas.height=H;
+  offCtx.drawImage(video,0,0,W,H);
+  const imgData=offCtx.getImageData(0,0,W,H);
+  const data=imgData.data;
+  const inv=new Uint8ClampedArray(data.length);
+  for(let i=0;i<data.length;i+=4){inv[i]=255-data[i];inv[i+1]=255-data[i+1];inv[i+2]=255-data[i+2];inv[i+3]=255;}
+  const fw=parseInt(document.getElementById('frameSlider').value)/100;
+  const fh=parseInt(document.getElementById('heightSlider').value);
+  const cropW=Math.floor(W*fw);
+  const cropX=Math.floor(W*(1-fw)/2);
+  const ch=Math.min(Math.floor(fh*(H/260)),H);
+  const cy=Math.floor((H-ch)/2);
+  const cropNormal=new Uint8ClampedArray(cropW*ch*4);
+  const cropInvert=new Uint8ClampedArray(cropW*ch*4);
+  for(let y=0;y<ch;y++){
+    for(let x=0;x<cropW;x++){
+      const si=((cy+y)*W+(cropX+x))*4;
+      const di=(y*cropW+x)*4;
+      cropNormal[di]=data[si];cropNormal[di+1]=data[si+1];cropNormal[di+2]=data[si+2];cropNormal[di+3]=255;
+      cropInvert[di]=inv[si];cropInvert[di+1]=inv[si+1];cropInvert[di+2]=inv[si+2];cropInvert[di+3]=255;
+    }
+  }
+  if(modePreview){
+    let pc=document.getElementById('previewCanvas');
+    if(!pc){pc=document.createElement('canvas');pc.id='previewCanvas';pc.style.cssText='width:100%;border-radius:6px;margin-bottom:8px;border:1px solid var(--border)';document.getElementById('scanResult').before(pc);}
+    pc.width=cropW;pc.height=ch;
+    pc.getContext('2d').putImageData(new ImageData(cropInvert,cropW,ch),0,0);
+  }
+  frameCount++;
+  if(modeBarcode&&frameCount%2===0){
+    document.getElementById('scanStatus').textContent=`🔲 バーコード解析中 (${frameCount})`;
+    await tryZXing(cropNormal,cropW,ch,'通常');
+    await tryZXing(cropInvert,cropW,ch,'反転');
+    await tryZXing(new Uint8ClampedArray(data),W,H,'通常全体');
+    await tryZXing(inv,W,H,'反転全体');
+  }
+  if(modeOcr&&frameCount%4===0&&!ocrBusy){
+    document.getElementById('scanStatus').textContent=`📝 OCR解析中...`;
+    ocrBusy=true;
+    await tryOCR(cropNormal,cropW,ch);
+    await tryOCR(cropInvert,cropW,ch);
+    ocrBusy=false;
+  }
+  scheduleNext();
+}
+
+async function tryZXing(pixelData,W,H,label){
+  try{const lum=new ZXing.RGBLuminanceSource(pixelData,W,H);const bmp=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));const r=zxingReader.decode(bmp);if(r) onScanResult(r.getText(),r.getBarcodeFormat().toString());}catch(e){}
+  try{const lum=new ZXing.RGBLuminanceSource(pixelData,W,H);const bmp=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));const r=zxingReader.decode(bmp.rotateCounterClockwise().rotateCounterClockwise());if(r) onScanResult(r.getText(),r.getBarcodeFormat().toString());}catch(e){}
+}
+
+async function tryOCR(pixelData,W,H){
+  if(!tesseractWorker) return;
+  try{
+    const tc=document.createElement('canvas');tc.width=W;tc.height=H;
+    tc.getContext('2d').putImageData(new ImageData(pixelData,W,H),0,0);
+    const {data:{text}}=await tesseractWorker.recognize(tc);
+    const clean=text.replace(/\s+/g,' ').trim();
+    if(clean.length>3){const p=parseOCRText(clean);if(p.gtin||p.expiry) onScanResult(clean,'OCR');}
+  }catch(e){slog('OCRエラー: '+e.message,'lerr');}
+}
+
+function scheduleNext(){if(!scanning) return;frameTimer=setTimeout(analyzeFrame,parseInt(document.getElementById('interval').value));}
+
+async function startScan(){
+  document.getElementById('startBtn').style.display='none';
+  document.getElementById('stopBtn').style.display='block';
+  document.getElementById('guideBox').style.display='block';
+  document.getElementById('scanStatus').textContent='初期化中...';
+  const hints=new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.CODE_128,ZXing.BarcodeFormat.RSS_EXPANDED,ZXing.BarcodeFormat.RSS_EXPANDED_STACKED,ZXing.BarcodeFormat.RSS_14,ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.PDF_417,ZXing.BarcodeFormat.DATA_MATRIX,ZXing.BarcodeFormat.QR_CODE]);
+  hints.set(ZXing.DecodeHintType.ASSUME_GS1,true);hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
+  zxingReader=new ZXing.MultiFormatReader();zxingReader.setHints(hints);
+  if(modeOcr&&!tesseractWorker){
+    document.getElementById('scanStatus').textContent='OCR初期化中...';
+    try{
+      tesseractWorker=await Tesseract.createWorker('eng',1,{logger:m=>{if(m.status==='recognizing text') document.getElementById('scanStatus').textContent=`OCR: ${Math.round(m.progress*100)}%`;}});
+      await tesseractWorker.setParameters({tessedit_char_whitelist:'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz()-.',tessedit_pageseg_mode:'6',preserve_interword_spaces:'1'});
+    }catch(e){tesseractWorker=null;}
+  }
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920,min:1280},height:{ideal:1080,min:720},focusMode:{ideal:'continuous'},exposureMode:{ideal:'continuous'}}});
+    track=stream.getVideoTracks()[0];
+    const caps=track.getCapabilities?.()??{};
+    if(caps.zoom) document.getElementById('zoomSlider').max=Math.min(caps.zoom.max,8);
+    const video=document.getElementById('video');video.srcObject=stream;await video.play();
+    await applyZoom(document.getElementById('zoomSlider').value);
+    scanning=true;
+    document.getElementById('scanStatus').textContent='📷 スキャン中… バーコードを枠内に合わせてください';
+    analyzeFrame();
+  }catch(e){document.getElementById('scanStatus').textContent='❌ カメラエラー: '+e.message;stopScan();}
+}
+
+async function stopScan(){
+  scanning=false;clearTimeout(frameTimer);
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  track=null;zxingReader=null;
+  const video=document.getElementById('video');video.style.transform='';video.srcObject=null;
+  document.getElementById('startBtn').style.display='block';
+  document.getElementById('stopBtn').style.display='none';
+  document.getElementById('guideBox').style.display='none';
+  document.getElementById('scanStatus').textContent='停止しました';
+}
+
+function adjustFrame(){
+  const w=parseInt(document.getElementById('frameSlider').value);
+  const h=parseInt(document.getElementById('heightSlider').value);
+  document.getElementById('frameVal').textContent=w+'%';
+  document.getElementById('heightVal').textContent=h+'px';
+  const box=document.getElementById('guideBox');box.style.width=w+'%';box.style.height=h+'px';
+}
+
+async function applyZoom(val){
+  val=parseFloat(val);
+  document.getElementById('zoomSlider').value=val;
+  document.getElementById('zoomVal').textContent=`×${val.toFixed(1)}`;
+  if(!track) return;
+  try{await track.applyConstraints({advanced:[{zoom:val}]});}
+  catch(e){document.getElementById('video').style.transform=`scale(${val})`;document.getElementById('video').style.transformOrigin='center center';}
+}
+
+function toggleMode(mode){
+  if(mode==='barcode'){modeBarcode=!modeBarcode;document.getElementById('tog-barcode').className='mbtn'+(modeBarcode?' on':'');}
+  else if(mode==='ocr'){modeOcr=!modeOcr;document.getElementById('tog-ocr').className='mbtn'+(modeOcr?' on':'');}
+  else if(mode==='preview'){modePreview=!modePreview;document.getElementById('tog-preview').className='mbtn'+(modePreview?' on':'');const pc=document.getElementById('previewCanvas');if(pc) pc.style.display=modePreview?'block':'none';}
+  else if(mode==='log'){modeLog=!modeLog;document.getElementById('tog-log').className='mbtn'+(modeLog?' on':'');document.getElementById('scanLog').style.display=modeLog?'block':'none';}
+}
+
+// ===== 検索 =====
+let searchHist=JSON.parse(localStorage.getItem('sHist')||'[]');let blurT=null;
+function saveSearchHist(r){const st=expSt(r.exp);searchHist=searchHist.filter(h=>h.name!==r.name);searchHist.unshift({code:r.code,name:r.name,str:st.str,cls:st.cls});if(searchHist.length>10) searchHist.pop();localStorage.setItem('sHist',JSON.stringify(searchHist));renderHistChips();}
+function renderHistChips(){
+  const el=document.getElementById('histChips');
+  if(!searchHist.length){el.innerHTML='<div style="font-size:12px;color:var(--text3)">検索履歴はありません</div>';return;}
+  el.innerHTML=searchHist.map((h,i)=>`<div class="hist-chip" onclick="selFromHist(${i})"><span class="hchip-name">${h.name}</span><span class="hchip-exp ${h.cls}">${h.str}</span></div>`).join('');
+}
+function selFromHist(i){const h=searchHist[i];const r=ALL_DATA.find(d=>d.name===h.name||(h.code&&d.code===h.code));if(r){document.getElementById('searchInput').value=r.name;document.getElementById('searchClear').style.display='block';document.getElementById('suggestList').style.display='none';document.getElementById('histSection').style.display='none';showDetail(r);}}
+function clearSearchHist(){searchHist=[];localStorage.removeItem('sHist');renderHistChips();}
+function hl(t,q){if(!q) return t;return t.replace(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`,'gi'),'<em>$1</em>');}
+function onSearch(){
+  const q=document.getElementById('searchInput').value.trim();
+  document.getElementById('searchClear').style.display=q?'block':'none';
+  if(!q){document.getElementById('suggestList').style.display='none';document.getElementById('detailArea').innerHTML='';document.getElementById('histSection').style.display='block';return;}
+  document.getElementById('histSection').style.display='none';
+  const ql=q.toLowerCase();
+  const matches=ALL_DATA.filter(r=>r.name.toLowerCase().includes(ql)||r.code.includes(ql)).slice(0,8);
+  const sl=document.getElementById('suggestList');
+  if(!matches.length){sl.innerHTML='<div style="padding:12px 14px;font-size:13px;color:var(--text3)">該当する薬品が見つかりません</div>';sl.style.display='block';return;}
+  sl.innerHTML=matches.map(r=>{
+    const al=getAl(r);const warn=al.some(a=>a.cls==='b-red')?'<span class="badge b-red">要対応</span>':al.some(a=>a.cls==='b-amber')?'<span class="badge b-amber">注意</span>':'';
+    return`<div class="suggest-item" onmousedown="selDrug('${r.code||''}','${r.name.replace(/'/g,"\\'")}')">
+      <div style="flex:1;overflow:hidden"><div class="suggest-name">${hl(r.name,q)}</div><div class="suggest-sub">${r.exp!=='-'?'期限：'+r.exp:'—'} / ${getRawMonths(r.rawM)}ヶ月不動</div></div>${warn}
+    </div>`;
+  }).join('');
+  sl.style.display='block';
+}
+function onSFocus(){clearTimeout(blurT);if(document.getElementById('searchInput').value.trim()) onSearch();}
+function onSBlur(){blurT=setTimeout(()=>document.getElementById('suggestList').style.display='none',200);}
+function selDrug(code,name){
+  const r=ALL_DATA.find(d=>(code&&d.code===code)||d.name===name);if(!r) return;
+  document.getElementById('searchInput').value=r.name;document.getElementById('searchClear').style.display='block';
+  document.getElementById('suggestList').style.display='none';document.getElementById('histSection').style.display='none';
+  showDetail(r);saveSearchHist(r);
+}
+function showDetail(r){
+  const st=expSt(r.exp);const al=getAl(r);
+  const isFudo=getRawMonths(r.rawM)>=FUDO_MONTHS;
+  const flags=[r.geki?'劇薬':'',r.doku?'毒薬':'',r.muko?'向精神薬':''].filter(Boolean);
+  let html=`<div class="detail-card ${st.cls}">`;
+  html+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="font-size:15px;font-weight:700;flex:1">${r.name}</div><span class="badge ${isFudo?'b-red':'b-blue'}">${isFudo?'不動在庫':'一般在庫'}</span></div>`;
+  html+=`<div class="dexp ${st.cls}">${st.str}</div>`;
+  html+=`<div style="font-size:12px;color:var(--text2);margin-bottom:10px">${st.label}</div>`;
+  html+=`<div class="sr-grid">
+    <div class="sr-item"><div class="sr-ilabel">在庫金額</div><div class="sr-ival">${r.stock.toLocaleString()}円</div></div>
+    <div class="sr-item"><div class="sr-ilabel">数量</div><div class="sr-ival ${r.qty<0?'neg':''}">${r.qty}</div></div>
+    <div class="sr-item"><div class="sr-ilabel">単価</div><div class="sr-ival">${r.tanka?r.tanka.toLocaleString()+'円':'—'}</div></div>
+    <div class="sr-item"><div class="sr-ilabel">薬価</div><div class="sr-ival">${r.yakka?r.yakka.toLocaleString()+'円':'—'}</div></div>
+    <div class="sr-item"><div class="sr-ilabel">薬価在庫金額</div><div class="sr-ival">${r.yakkaStock?r.yakkaStock.toLocaleString()+'円':'—'}</div></div>
+    <div class="sr-item"><div class="sr-ilabel">不動月数</div><div class="sr-ival">${r.rawM}ヶ月</div></div>
+    ${r.hakko&&r.hakko!=='-'?`<div class="sr-item"><div class="sr-ilabel">発注点</div><div class="sr-ival">${r.hakko}</div></div>`:''}
+    ${r.keika&&r.keika!=='-'?`<div class="sr-item"><div class="sr-ilabel">経過措置日</div><div class="sr-ival" style="color:var(--amber)">${r.keika}</div></div>`:''}
+    ${r.hanbai&&r.hanbai!=='-'?`<div class="sr-item"><div class="sr-ilabel">発売中止日</div><div class="sr-ival" style="color:var(--red)">${r.hanbai}</div></div>`:''}
+  </div>`;
+  if(al.length||flags.length) html+=`<div style="margin-top:10px">${al.map(a=>`<span class="badge ${a.cls}">${a.txt}</span>`).join('')}${flags.map(f=>`<span class="badge b-blue">${f}</span>`).join('')}</div>`;
+  if(r.code) html+=`<div style="margin-top:8px;font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--text3)">明細コード：${r.code}</div>`;
+  html+=`</div>`;
+  document.getElementById('detailArea').innerHTML=html;
+}
+function clearSearch(){document.getElementById('searchInput').value='';document.getElementById('searchClear').style.display='none';document.getElementById('suggestList').style.display='none';document.getElementById('detailArea').innerHTML='';document.getElementById('histSection').style.display='block';document.getElementById('searchInput').focus();}
+
+// ===== 不動在庫一覧 =====
+let fudoCur=[],fudoPgn=0;const PG=25;
+function goFudo(){fudoPgn=0;renderFudo();}
+function chgFudo(d){fudoPgn+=d;renderFudo();}
+function renderFudo(){
+  const q=document.getElementById('fq').value.toLowerCase();
+  const alt=document.getElementById('falt').value;
+  const srt=document.getElementById('fsrt').value;
+  let cur=FUDO_DATA.filter(r=>{
+    if(q&&!r.name.toLowerCase().includes(q)&&!r.code.includes(q)) return false;
+    if(alt==='neg'&&r.qty>=0) return false;
+    if(alt==='kei'&&(!r.keika||r.keika==='-')) return false;
+    if(alt==='dis'&&(!r.hanbai||r.hanbai==='-')) return false;
+    if(alt==='exp'){const d=pd(r.exp);if(!d)return false;const m=(d-TODAY)/(1000*60*60*24*30);if(m<0||m>12)return false;}
+    if(alt==='spc'&&!r.geki&&!r.doku&&!r.muko) return false;
+    return true;
+  });
+  cur.sort((a,b)=>{
+    if(srt==='stock_d') return b.stock-a.stock;
+    if(srt==='months_d') return getRawMonths(b.rawM)-getRawMonths(a.rawM);
+    if(srt==='qty_d') return b.qty-a.qty;
+    if(srt==='name_a') return a.name.localeCompare(b.name,'ja');
+    return 0;
+  });
+  fudoCur=cur;
+  const total=cur.length,pages=Math.max(1,Math.ceil(total/PG));
+  if(fudoPgn>=pages) fudoPgn=pages-1;if(fudoPgn<0) fudoPgn=0;
+  const slice=cur.slice(fudoPgn*PG,fudoPgn*PG+PG);
+  document.getElementById('fudoCbar').textContent=`${total}件表示中（不動在庫 全${FUDO_DATA.length}件）`;
+  document.getElementById('fudoTb').innerHTML=slice.length?slice.map(r=>{
+    const al=getAl(r);const neg=r.qty<0;
+    const flags=[r.geki?'劇薬':'',r.doku?'毒薬':'',r.muko?'向精神薬':''].filter(Boolean);
+    const kd=pd(r.keika);const kc=r.keika&&r.keika!=='-'?(kd&&kd<=TODAY?'kr':'ka'):'muted';
+    return`<tr>
+      <td class="num" style="color:var(--text3);font-size:11px">${r.code||'—'}</td>
+      <td class="ncell" title="${r.name}">${r.name}</td>
+      <td>${flags.map(f=>`<span class="badge b-blue">${f}</span>`).join('')}</td>
+      <td class="${neg?'neg':'num'}">${r.qty}</td>
+      <td class="${neg?'neg':'num'}">${r.stock.toLocaleString()}</td>
+      <td class="num">${r.rawM}</td><td>${r.lastRx||'—'}</td><td>${r.exp||'—'}</td>
+      <td class="${r.keika&&r.keika!=='-'?kc:'muted'}">${r.keika&&r.keika!=='-'?r.keika:'—'}</td>
+      <td class="${r.hanbai&&r.hanbai!=='-'?'kr':'muted'}">${r.hanbai&&r.hanbai!=='-'?r.hanbai:'—'}</td>
+      <td>${al.map(a=>`<span class="badge ${a.cls}">${a.txt}</span>`).join('')}</td>
+    </tr>`;
+  }).join(''):`<tr><td colspan="11" class="empty">該当するデータがありません</td></tr>`;
+  document.getElementById('fPi').textContent=`${fudoPgn+1} / ${pages}`;
+  document.getElementById('fPrv').disabled=fudoPgn===0;
+  document.getElementById('fNxt').disabled=fudoPgn>=pages-1;
+}
+
+// ===== 一般在庫一覧 =====
+let ippanCur=[],ippanPgn=0;
+function goIppan(){ippanPgn=0;renderIppan();}
+function chgIppan(d){ippanPgn+=d;renderIppan();}
+function renderIppan(){
+  const q=document.getElementById('iq').value.toLowerCase();
+  const alt=document.getElementById('ialt').value;
+  const srt=document.getElementById('isrt').value;
+  let cur=IPPAN_DATA.filter(r=>{
+    if(q&&!r.name.toLowerCase().includes(q)&&!r.code.includes(q)) return false;
+    if(alt==='neg'&&r.qty>=0) return false;
+    if(alt==='exp'){const d=pd(r.exp);if(!d)return false;const m=(d-TODAY)/(1000*60*60*24*30);if(m<0||m>12)return false;}
+    if(alt==='kei'&&(!r.keika||r.keika==='-')) return false;
+    if(alt==='dis'&&(!r.hanbai||r.hanbai==='-')) return false;
+    return true;
+  });
+  cur.sort((a,b)=>{
+    if(srt==='stock_d') return b.stock-a.stock;
+    if(srt==='yakka_d') return (b.yakkaStock||0)-(a.yakkaStock||0);
+    if(srt==='qty_d') return b.qty-a.qty;
+    if(srt==='months_d') return getRawMonths(b.rawM)-getRawMonths(a.rawM);
+    if(srt==='name_a') return a.name.localeCompare(b.name,'ja');
+    return 0;
+  });
+  ippanCur=cur;
+  const total=cur.length,pages=Math.max(1,Math.ceil(total/PG));
+  if(ippanPgn>=pages) ippanPgn=pages-1;if(ippanPgn<0) ippanPgn=0;
+  const slice=cur.slice(ippanPgn*PG,ippanPgn*PG+PG);
+  document.getElementById('ippanCbar').textContent=`${total}件表示中（一般在庫 全${IPPAN_DATA.length}件）`;
+  document.getElementById('ippanTb').innerHTML=slice.length?slice.map(r=>{
+    const al=getAl(r);const neg=r.qty<0;
+    const expStat=expSt(r.exp);
+    return`<tr>
+      <td class="num" style="color:var(--text3);font-size:11px">${r.code||'—'}</td>
+      <td class="ncell" title="${r.name}">${r.name}</td>
+      <td class="${neg?'neg':'num'}">${r.qty}</td>
+      <td class="num">${r.tanka?r.tanka.toLocaleString():'-'}</td>
+      <td class="num">${r.stock?r.stock.toLocaleString():'-'}</td>
+      <td class="num">${r.yakka?r.yakka.toLocaleString():'-'}</td>
+      <td class="num">${r.yakkaStock?r.yakkaStock.toLocaleString():'-'}</td>
+      <td class="num ${getRawMonths(r.rawM)>=FUDO_MONTHS?'kr':''}">${r.rawM}</td>
+      <td class="${expStat.cls==='danger'?'kr':expStat.cls==='warn'?'ka':'muted'}">${r.exp||'—'}</td>
+      <td class="num">${r.hakko||'—'}</td>
+      <td>${al.map(a=>`<span class="badge ${a.cls}">${a.txt}</span>`).join('')}</td>
+    </tr>`;
+  }).join(''):`<tr><td colspan="11" class="empty">該当するデータがありません</td></tr>`;
+  document.getElementById('iPi').textContent=`${ippanPgn+1} / ${pages}`;
+  document.getElementById('iPrv').disabled=ippanPgn===0;
+  document.getElementById('iNxt').disabled=ippanPgn>=pages-1;
+}
+
+// ===== GitHubダウンロード =====
+function downloadHTML(){
+  if(!ALL_DATA.length){
+    document.getElementById('dlStatus').textContent='⚠️ 先にCSVを読み込んでください';
+    document.getElementById('dlStatus').style.color='var(--red)';
+    return;
+  }
+
+  document.getElementById('dlStatus').textContent='⏳ 生成中...';
+  document.getElementById('dlStatus').style.color='var(--text3)';
+
+  const today=new Date();
+  const dateStr=`${today.getFullYear()}/${String(today.getMonth()+1).padStart(2,'0')}/${String(today.getDate()).padStart(2,'0')}`;
+  const dataJson=JSON.stringify(ALL_DATA);
+
+  // 現在のHTMLを取得
+  let html=document.documentElement.outerHTML;
+
+  // EMBEDDED_DATAの既存定義を削除（再ダウンロード時の重複防止）
+  html=html.replace(/\/\/ ===== 組み込みデータ =====[\s\S]*?\/\/ ===== 初期化 =====/,'// ===== 初期化 =====');
+
+  // 初期化の前にデータを埋め込む
+  html=html.replace(
+    '// ===== 初期化 =====',
+    `// ===== 組み込みデータ（${dateStr}）=====\nconst EMBEDDED_DATA=${dataJson};\n// ===== 初期化 =====`
+  );
+
+  // 起動時の処理を書き換え（EMBEDDED_DATAを優先使用）
+  html=html.replace(
+    /\/\/ ★ 組み込みデータを使用[\s\S]*?} else if\(loadDataFromStorage\(\)\)/,
+    `// ★ 組み込みデータを使用
+if(typeof EMBEDDED_DATA!=='undefined'&&EMBEDDED_DATA.length){
+  ALL_DATA=EMBEDDED_DATA;
+  FUDO_DATA=EMBEDDED_DATA.filter(r=>getRawMonths(r.rawM)>=FUDO_MONTHS);
+  IPPAN_DATA=EMBEDDED_DATA;
+  document.getElementById('updatedDate').textContent='${dateStr}';
+} else if(loadDataFromStorage())`
+  );
+
+  // 組み込みデータがない初回版の場合も対応
+  if(!html.includes('EMBEDDED_DATA')){
+    html=html.replace(
+      /\/\/ ★ 起動時にlocalStorageからCSVデータを復元\nif\(loadDataFromStorage\(\)\)/,
+      `// ★ 組み込みデータを使用
+if(typeof EMBEDDED_DATA!=='undefined'&&EMBEDDED_DATA.length){
+  ALL_DATA=EMBEDDED_DATA;
+  FUDO_DATA=EMBEDDED_DATA.filter(r=>getRawMonths(r.rawM)>=FUDO_MONTHS);
+  IPPAN_DATA=EMBEDDED_DATA;
+  document.getElementById('updatedDate').textContent='${dateStr}';
+} else if(loadDataFromStorage())`
+    );
+  }
+
+  const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='index.html';
+  a.click();
+  URL.revokeObjectURL(a.href);
+
+  document.getElementById('dlStatus').textContent=`✅ index.html（${ALL_DATA.length}品目）をダウンロードしました`;
+  document.getElementById('dlStatus').style.color='var(--accent)';
+}
+function saveDataToStorage(parsed, dateStr){
+  try{
+    const json=JSON.stringify(parsed);
+    localStorage.setItem('csvData', json);
+    localStorage.setItem('csvDate', dateStr);
+    const saved=localStorage.getItem('csvData');
+    if(saved) console.log('✅ localStorage保存成功: '+parsed.length+'件 / '+json.length+'bytes');
+    else console.error('❌ localStorage保存失敗: getItemがnull');
+  }catch(e){
+    console.error('❌ localStorage保存エラー:', e);
+    alert('データ保存エラー: '+e.message);
+  }
+}
+
+function loadDataFromStorage(){
+  try{
+    const raw=localStorage.getItem('csvData');
+    const date=localStorage.getItem('csvDate');
+    console.log('localStorage復元試行: raw='+(raw?raw.length+'bytes':'null')+' date='+date);
+    if(raw&&date){
+      const parsed=JSON.parse(raw);
+      if(parsed.length){
+        ALL_DATA=parsed;
+        FUDO_DATA=parsed.filter(r=>getRawMonths(r.rawM)>=FUDO_MONTHS);
+        IPPAN_DATA=parsed;
+        document.getElementById('updatedDate').textContent=date;
+        console.log('✅ localStorage復元成功: '+parsed.length+'件');
+        return true;
+      }
+    }
+  }catch(e){
+    console.error('❌ localStorage復元エラー:', e);
+  }
+  return false;
+}
+
+function loadCSV(event){
+  const file=event.target.files[0];if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const parsed=parseCSV(e.target.result);
+      if(!parsed.length) throw new Error('データが見つかりません');
+      ALL_DATA=parsed;
+      FUDO_DATA=parsed.filter(r=>getRawMonths(r.rawM)>=FUDO_MONTHS);
+      IPPAN_DATA=parsed;
+      const today=new Date();
+      const dateStr=`${today.getFullYear()}/${String(today.getMonth()+1).padStart(2,'0')}/${String(today.getDate()).padStart(2,'0')}`;
+      document.getElementById('updatedDate').textContent=dateStr;
+      // ★ localStorageに保存（ページ更新後も残る）
+      saveDataToStorage(parsed, dateStr);
+      // 保存確認
+      const saved=localStorage.getItem('csvData');
+      const saveStatus=saved?'💾 端末に保存済み（ページ更新後も保持）':'⚠️ 端末への保存に失敗しました';
+      document.getElementById('uploadStatus').innerHTML=`
+        <div style="background:var(--accent-light);border:1px solid #b2d4bb;border-radius:var(--radius);padding:12px 16px;font-size:13px;color:var(--accent);margin-top:12px">
+          ✅ ${file.name} 読込完了（全${parsed.length}品目）<br>
+          不動在庫：${FUDO_DATA.length}品目 / 一般在庫：${IPPAN_DATA.length}品目<br>
+          <span style="font-size:11px">${saveStatus}</span>
+        </div>`;
+      renderHome();
+      event.target.value='';
+    }catch(err){
+      document.getElementById('uploadStatus').innerHTML=`<div style="background:var(--red-light);border-radius:var(--radius);padding:12px 16px;font-size:13px;color:var(--red);margin-top:12px">❌ ${err.message}</div>`;
+    }
+  };
+  reader.readAsText(file,'UTF-8');
+}
+
+function parseCSV(text){
+  if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
+  const lines=text.split('\n').filter(l=>l.trim());
+  const headers=lines[0].split(',').map(h=>h.trim());
+  const idx={
+    code:headers.indexOf('明細コード'),
+    name:headers.indexOf('品名'),
+    tanka:headers.indexOf('単価'),
+    yakka:headers.indexOf('薬価'),
+    qty:headers.indexOf('理論在庫'),
+    stock:headers.indexOf('在庫金額'),
+    yakkaStock:headers.indexOf('薬価在庫金額'),
+    months:headers.indexOf('不動月数'),
+    hakko:headers.indexOf('発注点'),
+    exp:headers.indexOf('有効期限'),
+    keika:headers.indexOf('経過措置日'),
+    hanbai:headers.indexOf('発売中止日'),
+    geki:headers.indexOf('劇薬'),
+    doku:headers.indexOf('毒薬'),
+    muko:headers.indexOf('向精神薬'),
+    brand:headers.indexOf('先発/後発'),
+    lastRx:headers.indexOf('最終処方日'),
+    cat:headers.indexOf('使用区分'),
+  };
+  return lines.slice(1).map(line=>{
+    const cols=line.split(',');
+    const rawM=cols[idx.months]?.trim()||'0';
+    return{
+      code:cols[idx.code]?.trim()||'',
+      name:cols[idx.name]?.trim()||'',
+      tanka:parseFloat(cols[idx.tanka])||0,
+      yakka:parseFloat(cols[idx.yakka])||0,
+      qty:parseFloat(cols[idx.qty])||0,
+      stock:parseInt(cols[idx.stock])||0,
+      yakkaStock:parseInt(cols[idx.yakkaStock])||0,
+      rawM:rawM,
+      hakko:cols[idx.hakko]?.trim()||'-',
+      exp:idx.exp>=0?cols[idx.exp]?.trim()||'-':'-',
+      keika:idx.keika>=0?cols[idx.keika]?.trim()||'-':'-',
+      hanbai:idx.hanbai>=0?cols[idx.hanbai]?.trim()||'-':'-',
+      geki:idx.geki>=0?!!cols[idx.geki]?.trim():false,
+      doku:idx.doku>=0?!!cols[idx.doku]?.trim():false,
+      muko:idx.muko>=0?!!cols[idx.muko]?.trim():false,
+      brand:idx.brand>=0?cols[idx.brand]?.trim()||'':'-',
+      lastRx:idx.lastRx>=0?cols[idx.lastRx]?.trim()||'-':'-',
+      cat:idx.cat>=0?cols[idx.cat]?.trim()||'':'-',
+    };
+  }).filter(r=>r.name);
+}
+
+// ===== 初期化 =====
+loadSettings();
+renderHistChips();
+renderScanHist();
+// ★ 起動時にlocalStorageからCSVデータを復元
+if(loadDataFromStorage()){
+  document.getElementById('uploadStatus') && (document.getElementById('uploadStatus').innerHTML=
+    `<div style="background:var(--surface2);border-radius:var(--radius);padding:8px 12px;font-size:11px;color:var(--text3);margin-top:8px">
+      前回読み込んだデータを復元しました（${ALL_DATA.length}品目）
+    </div>`);
+}
+renderHome();
+</script>
+</body>
+</html>
