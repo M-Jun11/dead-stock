@@ -80,11 +80,19 @@
   .hist-hdr span{font-size:12px;font-weight:500;color:var(--text2)}
   .clrbtn{font-size:11px;padding:4px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface);color:var(--text2);cursor:pointer}
   .hlist{display:flex;flex-direction:column;gap:6px}
-  .hitem{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:10px 12px;display:flex;align-items:center;justify-content:space-between}
+  .hitem{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;cursor:pointer}
+  .hitem-row{display:flex;align-items:center;justify-content:space-between;padding:10px 12px}
   .hname{font-size:12px;font-weight:500;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .htime{font-size:10px;color:var(--text3);margin-top:1px}
   .hexp{font-size:12px;font-family:'IBM Plex Mono',monospace;font-weight:500;text-align:right}
   .hexp.ok{color:var(--accent)}.hexp.warn{color:var(--amber)}.hexp.danger{color:var(--red)}
+  .hdetail{display:none;padding:0 12px 10px}
+  .hdetail.open{display:block}
+  .hdetail-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .hdetail-item{background:var(--surface2);border-radius:4px;padding:5px 8px}
+  .hdetail-label{font-size:10px;color:var(--text3)}
+  .hdetail-val{font-size:13px;font-weight:600;font-family:'IBM Plex Mono',monospace}
+  .hist-more-btn{width:100%;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);font-size:12px;color:var(--text2);cursor:pointer;margin-top:4px;font-family:'Noto Sans JP',sans-serif}
   .emptymsg{text-align:center;padding:20px;color:var(--text3);font-size:12px}
 
   /* デバッグログ */
@@ -181,6 +189,7 @@
   <div class="tab" onclick="switchTab('scan')">📷 スキャン</div>
   <div class="tab" onclick="switchTab('search')">🔍 検索</div>
   <div class="tab" onclick="switchTab('list')">📋 一覧</div>
+  <div class="tab" onclick="switchTab('history')">📝 修正履歴</div>
   <div class="tab" onclick="switchTab('csv')">📁 更新</div>
 </div>
 
@@ -300,7 +309,16 @@
 </div>
 
 <!-- CSV更新 -->
-<div class="page" id="page-csv">
+<!-- 修正履歴 -->
+<div class="page" id="page-history">
+  <div class="hist-hdr" style="margin-bottom:8px">
+    <span>数量修正履歴</span>
+    <button class="clrbtn" onclick="clearQtyHistory()">クリア</button>
+  </div>
+  <div id="qtyHistList"><div class="emptymsg">修正履歴はありません</div></div>
+</div>
+
+<!-- CSV更新 -->
   <div class="upload-card">
     <div style="font-size:14px;font-weight:700;margin-bottom:8px">📁 CSVファイルを読み込む</div>
     <div style="font-size:12px;color:var(--text2);margin-bottom:16px">毎週の不動在庫レポートCSVをアップロードすると<br>データが最新に更新されます</div>
@@ -347,6 +365,8 @@ function getAl(r){
   if(r.keika&&r.keika!=='-'){const d=pd(r.keika);if(d&&d<=TODAY)a.push({cls:'b-red',txt:'経過措置切れ'});else if(d)a.push({cls:'b-amber',txt:'経過措置あり'});}
   if(r.hanbai&&r.hanbai!=='-') a.push({cls:'b-amber',txt:'発売中止'});
   if(r.exp&&r.exp!=='-'){const d=pd(r.exp);if(d){const m=(d-TODAY)/(1000*60*60*24*30);if(m>=0&&m<=12)a.push({cls:'b-amber',txt:'期限1年以内'});}}
+  const rawM=parseInt(r.rawM)||0;
+  if(rawM>=6) a.push({cls:'b-red',txt:`不動${rawM}ヶ月`});
   return a;
 }
 function findByGTIN(gtin){
@@ -355,13 +375,14 @@ function findByGTIN(gtin){
 }
 
 // ===== タブ =====
-const TABS=['home','scan','search','list','csv'];
+const TABS=['home','scan','search','list','history','csv'];
 function switchTab(t){
   document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',TABS[i]===t));
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+t).classList.add('active');
   if(t==='home') renderHome();
   if(t==='list') renderList();
+  if(t==='history') renderQtyHistory();
   if(t==='scan'&&!scanning) document.getElementById('guideBox').style.display='none';
 }
 
@@ -376,7 +397,7 @@ function renderHome(){
     <div class="metric"><div class="mlabel">緊急対応</div><div class="mval red">${danger.length}品目</div></div>
     <div class="metric"><div class="mlabel">要注意</div><div class="mval amber">${warn.length}品目</div></div>
   `;
-  const all=[...danger,...warn].slice(0,30);
+  const all=[...danger,...warn].slice(0,100);
   if(!all.length){document.getElementById('alertSection').innerHTML='<div class="emptymsg">アラートはありません ✅</div>';return;}
   document.getElementById('alertSection').innerHTML=
     `<div style="font-size:12px;font-weight:500;color:var(--text2);margin-bottom:8px">要対応アラート（${all.length}件）</div>`+
@@ -449,10 +470,12 @@ function parseOCRText(text){
   const r={gtin:null,expiry:null,lot:null};
   // OCR誤認識補正（数字のみの部分はO→0、I→1。英字部分はそのまま保持）
   const clean=text
-    .replace(/\bO(\d)/g,'0$1')   // O+数字 → 0+数字
-    .replace(/(\d)O\b/g,'$10')   // 数字+O → 数字+0
-    .replace(/[Il\|](?=\d)/g,'1') // I/l/|+数字 → 1+数字
-    .replace(/(?<=\d)[Il\|]/g,'1') // 数字+I/l/| → 数字+1
+    .replace(/\bO(\d)/g,'0$1')
+    .replace(/(\d)O\b/g,'$10')
+    .replace(/[Il\|](?=\d)/g,'1')
+    .replace(/(?<=\d)[Il\|]/g,'1')
+    .replace(/(?<=\d)S(?=\d)/g,'5')
+    .replace(/(?<=\d)B(?=\d)/g,'8')
     .replace(/\s+/g,' ').trim();
   slog(`OCR: "${clean.slice(0,80)}"`, 'linfo');
 
@@ -495,9 +518,9 @@ function parseOCRText(text){
     /\(?10\)?[\s:\-]([A-Z0-9]{2,20})(?=[\s\(]|$)/i, // 末尾または次のAIまで
   ];
   for(const pat of lotPats){
-    const m=text.match(pat); // 元のtext（補正前）で照合
+    const m=text.match(pat);
     if(m&&m[1]&&m[1]!==r.gtin&&m[1].length>=2){
-      r.lot=m[1].trim();
+      r.lot=m[1].trim().replace(/(?<=[0-9])S(?=[0-9])/g,'5').replace(/(?<=[0-9])B(?=[0-9])/g,'8');
       break;
     }
   }
@@ -525,6 +548,14 @@ function onScanResult(raw, fmt){
   const al=drug?getAl(drug):[];
   const time=new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
 
+  // 自動停止
+  scanning=false;
+  clearTimeout(frameTimer);
+  const startBtn=document.getElementById('startBtn');
+  const stopBtn=document.getElementById('stopBtn');
+  if(startBtn) startBtn.style.display='';
+  if(stopBtn) stopBtn.style.display='none';
+
   // 結果カード表示
   const card=document.getElementById('scanResult');
   card.className=`scan-result ${expStat.cls}`;
@@ -536,33 +567,95 @@ function onScanResult(raw, fmt){
     `<div class="sr-label">${expStat.label}</div>`+
     (drug?`<div class="sr-grid">
       <div class="sr-item"><div class="sr-ilabel">在庫金額</div><div class="sr-ival">${drug.stock.toLocaleString()}円</div></div>
-      <div class="sr-item"><div class="sr-ilabel">数量</div><div class="sr-ival ${drug.qty<0?'neg':''}">${drug.qty}</div></div>
+      <div class="sr-item"><div class="sr-ilabel">数量</div><div class="sr-ival ${drug.qty<0?'neg':''}" id="qtyDisplay">${drug.qty}</div></div>
       <div class="sr-item"><div class="sr-ilabel">不動月数</div><div class="sr-ival">${drug.rawM}</div></div>
-      <div class="sr-item"><div class="sr-ilabel">最終処方日</div><div class="sr-ival">${drug.lastRx}</div></div>
+      <div class="sr-item"><div class="sr-ilabel">薬価在庫</div><div class="sr-ival">${(drug.yakkaStock||0).toLocaleString()}円</div></div>
     </div>
+    <div style="display:flex;gap:6px;align-items:center;margin-top:8px">
+      <input type="number" id="qtyInput" value="${drug.qty}" step="1" style="flex:1;padding:6px 8px;font-size:15px;font-family:'IBM Plex Mono',monospace;border:1px solid #ccc9be;border-radius:6px;text-align:center">
+      <button onclick="saveQty('${drug.name.replace(/'/g,"\\'")}',document.getElementById('qtyInput').value)" style="padding:6px 14px;background:#2d5a3d;color:white;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif">数量保存</button>
+    </div>
+    <div id="qtySaveStatus" style="font-size:11px;margin-top:4px"></div>
     ${al.length?`<div style="margin-top:8px">${al.map(a=>`<span class="badge ${a.cls}">${a.txt}</span>`).join('')}</div>`:''}`:'')+(
     p.lot?`<div class="sr-raw">ロット：${p.lot}</div>`:'')+
-    (p.gtin?`<div class="sr-raw">GTIN：${p.gtin}</div>`:'');
+    (p.gtin?`<div class="sr-raw">GTIN：${p.gtin}</div>`:'')+
+    `<button onclick="nextScan()" style="margin-top:10px;width:100%;padding:8px;background:#2d5a3d;color:white;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif">▶ 次へ</button>`;
 
-  // 履歴追加
-  scanHist.unshift({name:drug?drug.name:'不明',exp:p.expiry||'—',cls:expStat.cls,time});
-  if(scanHist.length>20) scanHist.pop();
+  // 履歴追加（詳細データも保存）
+  scanHist.unshift({
+    name:drug?drug.name:'不明',
+    exp:p.expiry||'—',
+    expLabel:expStat.label,
+    cls:expStat.cls,
+    time,
+    qty:drug?drug.qty:null,
+    stock:drug?drug.stock:null,
+    yakkaStock:drug?drug.yakkaStock:null,
+    rawM:drug?drug.rawM:null,
+    lot:p.lot||null,
+    gtin:p.gtin||null,
+  });
+  if(scanHist.length>50) scanHist.pop();
   renderScanHist();
 
-  document.getElementById('scanStatus').textContent='✅ 読み取り成功！';
+  document.getElementById('scanStatus').textContent='✅ 読み取り成功！　▶次へ で続けてスキャン';
   slog(`✅ ${fmt} GTIN:${p.gtin||'—'} 期限:${p.expiry||'—'} ロット:${p.lot||'—'}`,'lok');
+}
+
+function nextScan(){
+  lastRaw=''; lastTime=0;
+  const card=document.getElementById('scanResult');
+  if(card) card.style.display='none';
+  document.getElementById('scanStatus').textContent='📷 カメラを準備中...';
+  startScan();
 }
 
 function renderScanHist(){
   const el=document.getElementById('scanHistList');
   if(!scanHist.length){el.innerHTML='<div class="emptymsg">スキャン履歴はありません</div>';return;}
-  el.innerHTML=scanHist.map(h=>`
-    <div class="hitem">
-      <div><div class="hname">${h.name}</div><div class="htime">${h.time}</div></div>
-      <div class="hexp ${h.cls}">${h.exp}</div>
-    </div>`).join('');
+  const SHOW=5;
+  const showAll=el.dataset.showAll==='1';
+  const list=showAll?scanHist:scanHist.slice(0,SHOW);
+  el.innerHTML=list.map((h,i)=>{
+    const expColor=h.cls==='ok'?'var(--accent)':h.cls==='warn'?'var(--amber)':h.cls==='danger'?'var(--red)':'var(--text3)';
+    let detailItems='';
+    if(h.qty!=null) detailItems+=`<div class="hdetail-item"><div class="hdetail-label">在庫数量</div><div class="hdetail-val" style="color:${h.qty<0?'var(--red)':'var(--accent)'}">${h.qty}</div></div>`;
+    if(h.stock!=null) detailItems+=`<div class="hdetail-item"><div class="hdetail-label">在庫金額</div><div class="hdetail-val">${h.stock.toLocaleString()}円</div></div>`;
+    if(h.yakkaStock) detailItems+=`<div class="hdetail-item"><div class="hdetail-label">薬価在庫</div><div class="hdetail-val">${h.yakkaStock.toLocaleString()}円</div></div>`;
+    if(h.rawM) detailItems+=`<div class="hdetail-item"><div class="hdetail-label">不動月数</div><div class="hdetail-val">${h.rawM}ヶ月</div></div>`;
+    if(h.lot) detailItems+=`<div class="hdetail-item"><div class="hdetail-label">ロット</div><div class="hdetail-val">${h.lot}</div></div>`;
+    if(h.gtin) detailItems+=`<div class="hdetail-item" style="grid-column:span 2"><div class="hdetail-label">GTIN</div><div class="hdetail-val" style="font-size:11px">${h.gtin}</div></div>`;
+    if(!detailItems) detailItems=`<div style="font-size:12px;color:var(--text3);grid-column:span 2">在庫データなし</div>`;
+    return `<div class="hitem ${h.cls}">
+      <div class="hitem-row" onclick="toggleHistDetail('hd_${i}')">
+        <div style="flex:1;overflow:hidden;margin-right:8px">
+          <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h.name}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px">${h.time}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:14px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:${expColor}">${h.exp}</div>
+          <div style="font-size:10px;color:var(--text3)">▼ 詳細</div>
+        </div>
+      </div>
+      <div class="hdetail" id="hd_${i}">
+        <div style="font-size:11px;color:var(--text2);padding-top:8px;margin-bottom:4px">${h.expLabel||''}</div>
+        <div class="hdetail-grid">${detailItems}</div>
+      </div>
+    </div>`;
+  }).join('');
+  if(scanHist.length>SHOW){
+    el.innerHTML+=`<button class="hist-more-btn" onclick="toggleHistMore()">${showAll?'▲ 閉じる':'▼ もっと見る（残り'+(scanHist.length-SHOW)+'件）'}</button>`;
+  }
 }
-function clearScanHist(){scanHist=[];lastRaw='';renderScanHist();}
+function toggleHistDetail(id){
+  const el=document.getElementById(id);
+  if(el) el.classList.toggle('open');
+}
+function toggleHistMore(){
+  const el=document.getElementById('scanHistList');
+  el.dataset.showAll=el.dataset.showAll==='1'?'0':'1';
+  renderScanHist();
+}
 
 // フレーム解析
 async function analyzeFrame(){
@@ -961,6 +1054,69 @@ function parseCSV(text){
     return{code:cols[idx.code]?.trim()||'',name:cols[idx.name]?.trim()||'',cat:cols[idx.cat]?.trim()||'',brand:cols[idx.brand]?.trim()||'',maku:!!cols[idx.maku]?.trim(),kaku:!!cols[idx.kaku]?.trim(),geki:!!cols[idx.geki]?.trim(),doku:!!cols[idx.doku]?.trim(),muko:!!cols[idx.muko]?.trim(),qty:parseFloat(cols[idx.qty])||0,stock:parseInt(cols[idx.stock])||0,rawM:cols[idx.months]?.trim()||'-',lastRx:cols[idx.lastRx]?.trim()||'-',exp:cols[idx.exp]?.trim()||'-',keika:cols[idx.keika]?.trim()||'-',hanbai:cols[idx.hanbai]?.trim()||'-'};
   }).filter(r=>r.name);
 }
+
+const GAS_URL='https://script.google.com/macros/s/AKfycbytS1B0uFXWpe_f2sPwaBgE6bRUMkxD6FaO5tIQPXeRWUElVebuf3bnw9boi_SxbYSa/exec';
+let qtyHistory=[];
+
+async function saveQty(name, qty){
+  qty=parseFloat(qty);
+  if(isNaN(qty)){alert('正しい数量を入力してください');return;}
+  const drug=DATA.find(d=>d.name===name);
+  const prevQty=drug?drug.qty:null;
+  const el=document.getElementById('qtyDisplay');
+  if(el) el.textContent=qty;
+  const st=document.getElementById('qtySaveStatus');
+  if(st) st.innerHTML='<span style="color:#9e9b93">📤 送信中...</span>';
+  const time=new Date().toLocaleString('ja-JP');
+  const device=navigator.userAgent.includes('iPhone')?'iPhone':navigator.userAgent.includes('Android')?'Android':'PC';
+  let sent=false;
+  try{
+    await fetch(GAS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,qty,time,device})});
+    sent=true;
+    if(st) st.innerHTML='<span style="color:#2d5a3d">✅ '+qty+'に修正・保存しました</span>';
+  }catch(e){
+    if(st) st.innerHTML='<span style="color:#b7621a">✅ '+qty+'に修正（送信失敗）</span>';
+  }
+  qtyHistory.unshift({name,prevQty,qty,time,device,sent});
+  if(qtyHistory.length>200) qtyHistory.pop();
+  if(drug) drug.qty=qty;
+}
+
+function renderQtyHistory(){
+  const el=document.getElementById('qtyHistList');
+  if(!qtyHistory.length){el.innerHTML='<div class="emptymsg">修正履歴はありません</div>';return;}
+  el.innerHTML=`<div style="font-size:11px;color:var(--text3);margin-bottom:10px">${qtyHistory.length}件の修正履歴</div>`+
+  qtyHistory.map(h=>`
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px;border-left:3px solid var(--accent)">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px">${h.name}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+        <div style="background:var(--surface2);border-radius:6px;padding:6px 8px;text-align:center">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px">修正前</div>
+          <div style="font-size:18px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:var(--text2)">${h.prevQty!=null?h.prevQty:'—'}</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:6px;padding:6px 8px;text-align:center">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px">修正後</div>
+          <div style="font-size:18px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:var(--accent)">${h.qty}</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);display:flex;justify-content:space-between">
+        <span>🕐 ${h.time}</span>
+        <span style="display:flex;gap:6px">
+          <span>📱 ${h.device}</span>
+          <span style="color:${h.sent?'var(--accent)':'var(--amber)'}">${h.sent?'✅ 送信済':'⚠️ 未送信'}</span>
+        </span>
+      </div>
+    </div>`).join('');
+}
+
+function clearQtyHistory(){
+  if(!qtyHistory.length) return;
+  if(!confirm('修正履歴を全て削除しますか？')) return;
+  qtyHistory=[];
+  renderQtyHistory();
+}
+
+function clearScanHist(){scanHist=[];lastRaw='';renderScanHist();}
 
 // 初期化
 renderHome();
