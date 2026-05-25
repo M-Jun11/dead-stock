@@ -350,22 +350,6 @@ const GAS_URL='https://script.google.com/macros/s/AKfycbytS1B0uFXWpe_f2sPwaBgE6b
 
 DATA = BUILTIN;
 
-// 起動時にGASから最新在庫データを取得
-(async()=>{
-  try{
-    const res=await fetch(GAS_URL+'?type=zaiko');
-    const json=await res.json();
-    if(json.data&&json.data.length>0){
-      DATA=json.data;
-      if(json.time) document.getElementById('updatedDate').textContent=json.time;
-      renderHome();
-      console.log('GASから最新データ取得：'+json.data.length+'品目');
-    }
-  }catch(e){
-    console.log('GASデータ取得失敗、BUILTINを使用');
-  }
-})();
-
 // ===== ユーティリティ =====
 function pd(s){
   if(!s||s==='-'||s==='－') return null;
@@ -1078,28 +1062,15 @@ function renderList(){
 function loadCSV(event){
   const file=event.target.files[0];if(!file) return;
   const reader=new FileReader();
-  reader.onload=async e=>{
+  reader.onload=e=>{
     try{
       const parsed=parseCSV(e.target.result);
       if(!parsed.length) throw new Error('データが見つかりません');
       DATA=parsed;
       const today=new Date();
-      const dateStr=`${today.getFullYear()}/${String(today.getMonth()+1).padStart(2,'0')}/${String(today.getDate()).padStart(2,'0')}`;
-      document.getElementById('updatedDate').textContent=dateStr;
-      document.getElementById('uploadStatus').innerHTML=`<div style="background:var(--accent-light);border:1px solid #b2d4bb;border-radius:var(--radius);padding:12px 16px;font-size:13px;color:var(--accent);margin-top:12px">✅ ${file.name}を読み込みました（${parsed.length}品目）<br><span style="font-size:11px;color:var(--text3)">📤 スプレッドシートに送信中...</span></div>`;
+      document.getElementById('updatedDate').textContent=`${today.getFullYear()}/${String(today.getMonth()+1).padStart(2,'0')}/${String(today.getDate()).padStart(2,'0')}`;
+      document.getElementById('uploadStatus').innerHTML=`<div style="background:var(--accent-light);border:1px solid #b2d4bb;border-radius:var(--radius);padding:12px 16px;font-size:13px;color:var(--accent);margin-top:12px">✅ ${file.name}を読み込みました（${parsed.length}品目）</div>`;
       renderHome();event.target.value='';
-
-      // GASに在庫データを送信
-      try{
-        await fetch(GAS_URL,{
-          method:'POST', mode:'no-cors',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({type:'zaiko', rows:parsed, time:dateStr})
-        });
-        document.getElementById('uploadStatus').innerHTML=`<div style="background:var(--accent-light);border:1px solid #b2d4bb;border-radius:var(--radius);padding:12px 16px;font-size:13px;color:var(--accent);margin-top:12px">✅ ${file.name}を読み込みました（${parsed.length}品目）<br><span style="font-size:11px;color:var(--accent)">✅ スプレッドシートに保存しました！他の端末でリロードすると反映されます</span></div>`;
-      }catch(err){
-        document.getElementById('uploadStatus').innerHTML=`<div style="background:var(--accent-light);border:1px solid #b2d4bb;border-radius:var(--radius);padding:12px 16px;font-size:13px;color:var(--accent);margin-top:12px">✅ ${file.name}を読み込みました（${parsed.length}品目）<br><span style="font-size:11px;color:var(--amber)">⚠️ 送信失敗（このブラウザのみ反映）</span></div>`;
-      }
     }catch(err){
       document.getElementById('uploadStatus').innerHTML=`<div style="color:var(--red);font-size:13px;margin-top:8px">❌ エラー：${err.message}</div>`;
     }
