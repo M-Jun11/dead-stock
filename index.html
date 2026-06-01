@@ -1037,25 +1037,27 @@ function loadCSV(event){
       const today=new Date();
       const dateStr=`${today.getFullYear()}/${String(today.getMonth()+1).padStart(2,'0')}/${String(today.getDate()).padStart(2,'0')}`;
       document.getElementById('updatedDate').textContent=dateStr;
-      document.getElementById('uploadStatus').innerHTML=`<div style="background:var(--accent-light);border:1px solid #b2d4bb;border-radius:var(--radius);padding:12px 16px;font-size:13px;color:var(--accent);margin-top:12px">✅ ${file.name}を読み込みました（${parsed.length}品目）<br><span style="color:var(--text3);font-size:11px">📤 スプレッドシートに送信中...</span></div>`;
-      renderHome();event.target.value='';
+      renderHome();
+      event.target.value='';
+      document.getElementById('uploadStatus').innerHTML=`<div style="background:var(--accent-light);border:1px solid #b2d4bb;border-radius:var(--radius);padding:12px 16px;font-size:13px;color:var(--accent);margin-top:12px">✅ ${file.name}を読み込みました（${parsed.length}品目）<br><span style="color:var(--text3);font-size:11px">📤 スプレッドシートに送信中... (1/${Math.ceil(parsed.length/400)})</span></div>`;
 
       // データを圧縮（必要項目のみ）してGASに分割送信
       const compact=parsed.map(r=>({n:r.name,q:r.qty,s:r.stock,y:r.yakkaStock||0,m:r.rawM||'0'}));
-      const CHUNK=400; // 1回400件ずつ送信
+      const CHUNK=400;
       const total=Math.ceil(compact.length/CHUNK);
       let success=true;
       for(let i=0;i<total;i++){
         const chunk=compact.slice(i*CHUNK,(i+1)*CHUNK);
+        document.getElementById('uploadStatus').innerHTML=`<div style="background:var(--accent-light);border:1px solid #b2d4bb;border-radius:var(--radius);padding:12px 16px;font-size:13px;color:var(--accent);margin-top:12px">✅ ${file.name}を読み込みました（${parsed.length}品目）<br><span style="color:var(--text3);font-size:11px">📤 送信中... ${i+1}/${total}</span></div>`;
+        await new Promise(r=>setTimeout(r,100));
         try{
           await fetch(GAS_URL,{
             method:'POST',mode:'no-cors',
             headers:{'Content-Type':'application/json'},
             body:JSON.stringify({type:'zaiko_chunk',index:i,total,rows:chunk,time:dateStr})
           });
-          document.getElementById('uploadStatus').innerHTML=`<div style="background:var(--accent-light);border:1px solid #b2d4bb;border-radius:var(--radius);padding:12px 16px;font-size:13px;color:var(--accent);margin-top:12px">✅ ${file.name}を読み込みました（${parsed.length}品目）<br><span style="color:var(--text3);font-size:11px">📤 送信中... ${i+1}/${total}</span></div>`;
         }catch(err){success=false;break;}
-        await new Promise(r=>setTimeout(r,500)); // 0.5秒待つ
+        await new Promise(r=>setTimeout(r,800));
       }
       if(success){
         document.getElementById('uploadStatus').innerHTML=`<div style="background:var(--accent-light);border:1px solid #b2d4bb;border-radius:var(--radius);padding:12px 16px;font-size:13px;color:var(--accent);margin-top:12px">✅ ${file.name}を読み込みました（${parsed.length}品目）<br><span style="color:var(--accent);font-size:11px">✅ スプレッドシートに保存完了！スマホでリロードすると反映されます</span></div>`;
