@@ -1029,20 +1029,44 @@ function renderList(){
 function loadCSV(event){
   const file=event.target.files[0];if(!file) return;
   const reader=new FileReader();
-  reader.onload=e=>{
+  reader.onload=async e=>{
     try{
       const parsed=parseCSV(e.target.result);
       if(!parsed.length) throw new Error('データが見つかりません');
       DATA=parsed;
       const today=new Date();
-      document.getElementById('updatedDate').textContent=`${today.getFullYear()}/${String(today.getMonth()+1).padStart(2,'0')}/${String(today.getDate()).padStart(2,'0')}`;
-      document.getElementById('uploadStatus').innerHTML=`<div style="background:var(--accent-light);border:1px solid #b2d4bb;border-radius:var(--radius);padding:12px 16px;font-size:13px;color:var(--accent);margin-top:12px">✅ ${file.name}を読み込みました（${parsed.length}品目）</div>`;
+      const dateStr=`${today.getFullYear()}/${String(today.getMonth()+1).padStart(2,'0')}/${String(today.getDate()).padStart(2,'0')}`;
+      document.getElementById('updatedDate').textContent=dateStr;
+      document.getElementById('uploadStatus').innerHTML=`<div style="background:var(--accent-light);border:1px solid #b2d4bb;border-radius:var(--radius);padding:12px 16px;font-size:13px;color:var(--accent);margin-top:12px">✅ ${file.name}を読み込みました（${parsed.length}品目）<br><span style="color:var(--text3);font-size:11px">📤 スプレッドシートに送信中...</span></div>`;
       renderHome();event.target.value='';
+
+      // データを圧縮（必要項目のみ）してGASに分割送信
+      const compact=parsed.map(r=>({n:r.name,q:r.qty,s:r.stock,y:r.yakkaStock||0,m:r.rawM||'0'}));
+      const CHUNK=400; // 1回400件ずつ送信
+      const total=Math.ceil(compact.length/CHUNK);
+      let success=true;
+      for(let i=0;i<total;i++){
+        const chunk=compact.slice(i*CHUNK,(i+1)*CHUNK);
+        try{
+          await fetch(GAS_URL,{
+            method:'POST',mode:'no-cors',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({type:'zaiko_chunk',index:i,total,rows:chunk,time:dateStr})
+          });
+          document.getElementById('uploadStatus').innerHTML=`<div style="background:var(--accent-light);border:1px solid #b2d4bb;border-radius:var(--radius);padding:12px 16px;font-size:13px;color:var(--accent);margin-top:12px">✅ ${file.name}を読み込みました（${parsed.length}品目）<br><span style="color:var(--text3);font-size:11px">📤 送信中... ${i+1}/${total}</span></div>`;
+        }catch(err){success=false;break;}
+        await new Promise(r=>setTimeout(r,500)); // 0.5秒待つ
+      }
+      if(success){
+        document.getElementById('uploadStatus').innerHTML=`<div style="background:var(--accent-light);border:1px solid #b2d4bb;border-radius:var(--radius);padding:12px 16px;font-size:13px;color:var(--accent);margin-top:12px">✅ ${file.name}を読み込みました（${parsed.length}品目）<br><span style="color:var(--accent);font-size:11px">✅ スプレッドシートに保存完了！スマホでリロードすると反映されます</span></div>`;
+      }else{
+        document.getElementById('uploadStatus').innerHTML=`<div style="background:var(--accent-light);border:1px solid #b2d4bb;border-radius:var(--radius);padding:12px 16px;font-size:13px;color:var(--accent);margin-top:12px">✅ ${file.name}を読み込みました（${parsed.length}品目）<br><span style="color:var(--amber);font-size:11px">⚠️ 送信失敗（このブラウザのみ反映）</span></div>`;
+      }
     }catch(err){
       document.getElementById('uploadStatus').innerHTML=`<div style="background:var(--red-light);border-radius:var(--radius);padding:12px 16px;font-size:13px;color:var(--red);margin-top:12px">❌ ${err.message}</div>`;
     }
   };
-  reader.readAsText(file,'UTF-8');
+  reader.readAsText(file,'Shift_JIS');
 }
 function parseCSV(text){
   if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
@@ -1122,6 +1146,25 @@ function clearScanHist(){scanHist=[];lastRaw='';renderScanHist();}
 renderHome();
 renderHistChips();
 renderScanHist();
+
+// 起動時にGASから最新データを取得
+(async()=>{
+  try{
+    const res=await fetch(GAS_URL+'?type=zaiko');
+    const json=await res.json();
+    if(json.data&&json.data.length>0){
+      DATA=json.data.map(r=>({
+        name:r.name, qty:parseFloat(r.qty)||0, stock:parseInt(r.stock)||0,
+        yakkaStock:parseInt(r.yakkaStock)||0, rawM:String(r.rawM||'0'),
+        unit:'', tanka:0, yakka:0, keika:'-', hanbai:'-', exp:'-', lastRx:'-'
+      }));
+      if(json.time) document.getElementById('updatedDate').textContent=json.time;
+      renderHome();
+    }
+  }catch(e){
+    // 失敗時はBUILTINをそのまま使用
+  }
+})();
 </script>
 </body>
 </html>
