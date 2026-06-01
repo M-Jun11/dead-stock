@@ -918,7 +918,7 @@ function onSearch(){
   if(!q){document.getElementById('suggestList').style.display='none';document.getElementById('detailArea').innerHTML='';document.getElementById('histSection').style.display='block';return;}
   document.getElementById('histSection').style.display='none';
   const ql=q.toLowerCase();
-  const matches=DATA.filter(r=>r.name.toLowerCase().includes(ql)||r.code.includes(ql)).slice(0,8);
+  const matches=DATA.filter(r=>r.name.toLowerCase().includes(ql)||(r.code&&r.code.includes(ql))).slice(0,8);
   const sl=document.getElementById('suggestList');
   if(!matches.length){sl.innerHTML='<div style="padding:12px 14px;font-size:13px;color:var(--text3)">該当する薬品が見つかりません</div>';sl.style.display='block';return;}
   sl.innerHTML=matches.map(r=>{
@@ -982,7 +982,7 @@ function renderList(){
   const alt=document.getElementById('alt').value;
   const srt=document.getElementById('srt').value;
   cur=DATA.filter(r=>{
-    if(q&&!r.name.toLowerCase().includes(q)&&!r.code.includes(q)) return false;
+    if(q&&!r.name.toLowerCase().includes(q)&&!(r.code&&r.code.includes(q))) return false;
     if(cat&&r.cat!==cat) return false;
     if(brd&&r.brand!==brd) return false;
     if(alt==='neg'&&r.qty>=0) return false;
@@ -1158,13 +1158,16 @@ renderScanHist();
       DATA=json.data.map(r=>({
         name:r.name, qty:parseFloat(r.qty)||0, stock:parseInt(r.stock)||0,
         yakkaStock:parseInt(r.yakkaStock)||0, rawM:String(r.rawM||'0'),
-        unit:'', tanka:0, yakka:0, keika:'-', hanbai:'-', exp:'-', lastRx:'-'
+        code:'', unit:'', tanka:0, yakka:0, keika:'-', hanbai:'-', exp:'-', lastRx:'-', cat:'', brand:''
       }));
       if(json.time) document.getElementById('updatedDate').textContent=json.time;
       renderHome();
+      console.log('GAS取得成功:'+json.data.length+'件 '+json.time);
+    } else {
+      console.log('GASデータなし:', JSON.stringify(json));
     }
   }catch(e){
-    // 失敗時はBUILTINをそのまま使用
+    console.log('GAS取得エラー:'+e.message);
   }
 })();
 </script>
