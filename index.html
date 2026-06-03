@@ -225,7 +225,7 @@
       <span class="ctrl-label">モード</span>
       <div class="mode-btns">
         <button class="mbtn on" id="tog-barcode" onclick="toggleMode('barcode')">バーコード</button>
-        <button class="mbtn on" id="tog-ocr" onclick="toggleMode('ocr')">OCR★</button>
+        <button class="mbtn" id="tog-ocr" onclick="toggleMode('ocr')">OCR★</button>
         <button class="mbtn" id="tog-preview" onclick="toggleMode('preview')">プレビュー</button>
         <button class="mbtn" id="tog-log" onclick="toggleMode('log')">ログ</button>
       </div>
@@ -238,7 +238,7 @@
   </div>
 
   <div id="scanStatus">スタートボタンを押してください</div>
-  <div class="scan-result" id="scanResult"></div>
+  <div class="scan-result" id="scanResult" style="display:none"></div>
 
   <div class="hist-hdr">
     <span>スキャン履歴</span>
@@ -393,7 +393,7 @@ function renderHome(){
 
 // ===== スキャン =====
 let stream=null,track=null,scanning=false,frameTimer=null;
-let modeBarcode=true,modeOcr=true,modePreview=false,modeLog=false;
+let modeBarcode=true,modeOcr=false,modePreview=false,modeLog=false;
 let lastRaw='',lastTime=0,frameCount=0;
 let zxingReader=null,tesseractWorker=null,ocrBusy=false;
 let scanHist=[];
