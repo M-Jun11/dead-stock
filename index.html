@@ -646,21 +646,8 @@ function onScanResult(raw, fmt){
   const drug=scanAccum.drug;
   const expiry=scanAccum.expiry;
 
-  // GTINと有効期限の両方が揃ったら停止
-  if(!drug||!expiry){
-    // 途中経過を表示
-    const card=document.getElementById('scanResult');
-    card.style.display='block';
-    card.className='scan-result unknown';
-    const parts=[];
-    if(drug) parts.push(`✅ ${drug.name}`);
-    else parts.push('📷 バーコード読取中...');
-    if(expiry) parts.push(`✅ 期限:${expiry}`);
-    else parts.push('📷 期限読取中...');
-    card.innerHTML=`<div style="font-size:13px;color:var(--text2);padding:10px;text-align:center">${parts.join('<br>')}</div>`;
-    document.getElementById('scanStatus').textContent=parts.join(' ／ ');
-    return;
-  }
+  // GTINまたは有効期限が取れたら即停止・表示
+  if(!drug&&!scanAccum.gtin&&!expiry) return;
 
   // 両方揃った→停止
   scanning=false;
