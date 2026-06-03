@@ -206,6 +206,14 @@
     <div id="guideBox"><div class="scanline"></div></div>
   </div>
 
+  <div id="scanStatus">スタートボタンを押してください</div>
+  <div class="scan-result" id="scanResult"></div>
+
+  <div class="scan-btns">
+    <button class="btn-start" id="startBtn" onclick="startScan()">📷 スキャン開始</button>
+    <button class="btn-stop" id="stopBtn" onclick="stopScan()">■ 停止</button>
+  </div>
+
   <div class="scan-ctrl">
     <div class="ctrl-row">
       <span class="ctrl-label">🔍 ズーム</span>
@@ -240,14 +248,6 @@
       </div>
     </div>
   </div>
-
-  <div class="scan-btns">
-    <button class="btn-start" id="startBtn" onclick="startScan()">📷 スキャン開始</button>
-    <button class="btn-stop" id="stopBtn" onclick="stopScan()">■ 停止</button>
-  </div>
-
-  <div id="scanStatus">スタートボタンを押してください</div>
-  <div class="scan-result" id="scanResult"></div>
 
   <div class="hist-hdr">
     <span>スキャン履歴</span>
@@ -371,7 +371,13 @@ function getAl(r){
 }
 function findByGTIN(gtin){
   if(!gtin) return null;
-  return DATA.find(d=>d.code&&(gtin.includes(d.code)||gtin===d.code));
+  // codeで照合（BUILTINデータ）
+  const byCode=DATA.find(d=>d.code&&(gtin.includes(d.code)||gtin===d.code));
+  if(byCode) return byCode;
+  // GTINから品名を取得してDATAを品名で照合（GASデータ）
+  const nameFromGtin=typeof GTIN_MAP!=='undefined'?GTIN_MAP[gtin]:null;
+  if(nameFromGtin) return DATA.find(d=>d.name===nameFromGtin)||null;
+  return null;
 }
 
 // ===== タブ =====
