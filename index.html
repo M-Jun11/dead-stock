@@ -480,7 +480,7 @@ async function saveQtyFromModal(name, inputId){
   const device=navigator.userAgent.includes('iPhone')?'iPhone':navigator.userAgent.includes('Android')?'Android':'PC';
   let sent=false;
   try{
-    await fetch(GAS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,qty,time,device})});
+    await fetch(GAS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'qty',name,qty,time,device})});
     sent=true;
     if(st) st.innerHTML='<span style="color:var(--accent)">✅ 保存しました</span>';
   }catch(e){
@@ -1088,7 +1088,7 @@ async function saveQtyFromSearch(name){
   const device=navigator.userAgent.includes('iPhone')?'iPhone':navigator.userAgent.includes('Android')?'Android':'PC';
   let sent=false;
   try{
-    await fetch(GAS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,qty,time,device})});
+    await fetch(GAS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'qty',name,qty,time,device})});
     sent=true;
     if(st) st.innerHTML='<span style="color:var(--accent)">✅ 保存しました</span>';
     if(disp) disp.textContent=qty;
@@ -1235,7 +1235,7 @@ async function saveQty(name, qty){
   const device=navigator.userAgent.includes('iPhone')?'iPhone':navigator.userAgent.includes('Android')?'Android':'PC';
   let sent=false;
   try{
-    await fetch(GAS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,qty,time,device})});
+    await fetch(GAS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'qty',name,qty,time,device})});
     sent=true;
     if(st) st.innerHTML='<span style="color:#2d5a3d">✅ '+qty+'に修正・保存しました</span>';
   }catch(e){
