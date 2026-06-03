@@ -624,51 +624,47 @@ function calcExpStatus(expiry){
   return{cls:'ok',label:`残り約${Math.floor(diff/365)}年${Math.floor((diff%365)/30)}ヶ月`};
 }
 
-// スキャン蓄積データ
 let scanAccum={gtin:null, expiry:null, drug:null, lot:null};
 
 function onScanResult(raw, fmt){
   const now=Date.now();
-  if(raw===lastRaw&&now-lastTime<2000) return;
+  if(raw===lastRaw&&now-lastTime<3000) return;
   lastRaw=raw; lastTime=now;
 
   const p=fmt==='OCR'?parseOCRText(raw):parseGS1(raw);
+  if(!p.gtin&&!p.expiry&&!p.lot) return;
 
-  // 蓄積
-  if(p.gtin) scanAccum.gtin=p.gtin;
-  if(p.expiry) scanAccum.expiry=p.expiry;
-  if(p.lot) scanAccum.lot=p.lot;
-  if(p.gtin){
+  if(p.gtin&&!scanAccum.gtin) scanAccum.gtin=p.gtin;
+  if(p.expiry&&!scanAccum.expiry) scanAccum.expiry=p.expiry;
+  if(p.lot&&!scanAccum.lot) scanAccum.lot=p.lot;
+  if(p.gtin&&!scanAccum.drug){
     const found=findByGTIN(p.gtin);
     if(found) scanAccum.drug=found;
   }
 
   const drug=scanAccum.drug;
   const expiry=scanAccum.expiry;
+  const gtin=scanAccum.gtin;
+  const lot=scanAccum.lot;
 
-  // GTINまたは有効期限が取れたら即停止・表示
-  if(!drug&&!scanAccum.gtin&&!expiry) return;
-
-  // 両方揃った→停止
+  // 何か取れたら即停止・表示
   scanning=false;
   clearTimeout(frameTimer);
   document.getElementById('startBtn').style.display='';
   document.getElementById('stopBtn').style.display='none';
 
-  const expStat=calcExpStatus(expiry);
-  const al=getAl(drug);
+  const expStat=calcExpStatus(expiry||'');
+  const al=drug?getAl(drug):[];
   const time=new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
-  const gtin=scanAccum.gtin;
-  const lot=scanAccum.lot;
 
   const card=document.getElementById('scanResult');
-  card.className=`scan-result ${expStat.cls}`;
+  card.className=`scan-result ${expStat.cls||'unknown'}`;
   card.style.display='block';
   card.innerHTML=
     `<div class="sr-title">スキャン結果 (${fmt})</div>`+
-    `<div class="sr-name">${drug.name}</div>`+
-    `<div class="sr-exp ${expStat.cls}">${expiry}</div>`+
-    `<div class="sr-label">${expStat.label}</div>`+
+    `<div class="sr-name">${drug?drug.name:'在庫リストに一致する薬品なし'}</div>`+
+    `<div class="sr-exp ${expStat.cls||'unknown'}">${expiry||'—'}</div>`+
+    `<div class="sr-label">${expStat.label||''}</div>`+
     `<div class="sr-grid">
       <div class="sr-item"><div class="sr-ilabel">在庫金額</div><div class="sr-ival">${drug.stock.toLocaleString()}円</div></div>
       <div class="sr-item"><div class="sr-ilabel">数量</div><div class="sr-ival ${drug.qty<0?'neg':''}" id="qtyDisplay">${drug.qty}</div></div>
@@ -685,7 +681,7 @@ function onScanResult(raw, fmt){
     (gtin?`<div class="sr-raw">GTIN：${gtin}</div>`:'')+
     `<button onclick="nextScan()" style="margin-top:10px;width:100%;padding:8px;background:#2d5a3d;color:white;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif">▶ 次へ</button>`;
 
-  scanHist.unshift({name:drug.name,exp:expiry,expLabel:expStat.label,cls:expStat.cls,time,qty:drug.qty,stock:drug.stock,yakkaStock:drug.yakkaStock,rawM:drug.rawM,lot,gtin});
+  scanHist.unshift({name:drug?drug.name:'不明',exp:expiry||'—',expLabel:expStat.label||'',cls:expStat.cls||'unknown',time,qty:drug?drug.qty:null,stock:drug?drug.stock:null,yakkaStock:drug?drug.yakkaStock:null,rawM:drug?drug.rawM:null,lot:lot||null,gtin:gtin||null});
   if(scanHist.length>50) scanHist.pop();
   renderScanHist();
 
@@ -760,52 +756,46 @@ async function analyzeFrame(){
   offCtx.drawImage(video,0,0,W,H);
 
   const imgData=offCtx.getImageData(0,0,W,H);
+  const data=imgData.data;
+  const inv=new Uint8ClampedArray(data.length);
+  for(let i=0;i<data.length;i+=4){inv[i]=255-data[i];inv[i+1]=255-data[i+1];inv[i+2]=255-data[i+2];inv[i+3]=255;}
 
-  // プレビュー表示
+  const fw=parseInt(document.getElementById('frameSlider').value)/100;
+  const fh=parseInt(document.getElementById('heightSlider').value);
+  const cropW=Math.floor(W*fw);
+  const cropX=Math.floor(W*(1-fw)/2);
+  const videoDisplayH=260;
+  const ch=Math.min(Math.floor(fh*(H/videoDisplayH)),H);
+  const cy=Math.floor((H-ch)/2);
+
+  const cropData=new Uint8ClampedArray(cropW*ch*4);
+  for(let y=0;y<ch;y++){for(let x=0;x<cropW;x++){const si=((cy+y)*W+(cropX+x))*4;const di=(y*cropW+x)*4;cropData[di]=inv[si];cropData[di+1]=inv[si+1];cropData[di+2]=inv[si+2];cropData[di+3]=255;}}
+
+  const normalCropData=new Uint8ClampedArray(cropW*ch*4);
+  for(let y=0;y<ch;y++){for(let x=0;x<cropW;x++){const si=((cy+y)*W+(cropX+x))*4;const di=(y*cropW+x)*4;normalCropData[di]=data[si];normalCropData[di+1]=data[si+1];normalCropData[di+2]=data[si+2];normalCropData[di+3]=255;}}
+
   if(modePreview){
     let pc=document.getElementById('previewCanvas');
     if(!pc){pc=document.createElement('canvas');pc.id='previewCanvas';pc.style.cssText='width:100%;border-radius:6px;margin-bottom:8px;border:1px solid var(--border)';document.getElementById('scanResult').before(pc);}
-    pc.width=W;pc.height=H;
-    pc.getContext('2d').putImageData(imgData,0,0);
+    pc.width=cropW;pc.height=ch;
+    pc.getContext('2d').putImageData(new ImageData(cropData,cropW,ch),0,0);
   }
 
   frameCount++;
 
-  // バーコード解析（毎フレーム）
-  if(modeBarcode){
-    try{
-      const lum=new ZXing.RGBLuminanceSource(new Uint8ClampedArray(imgData.data),W,H);
-      const bmp=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-      const r=zxingReader.decode(bmp);
-      if(r){onScanResult(r.getText(),r.getBarcodeFormat().toString());return;}
-    }catch(e){}
-    // 反転（黒背景バーコード対応）- scanning継続中のみ
-    if(scanning){
-      try{
-        const data=imgData.data;
-        const inv=new Uint8ClampedArray(data.length);
-        for(let i=0;i<data.length;i+=4){inv[i]=255-data[i];inv[i+1]=255-data[i+1];inv[i+2]=255-data[i+2];inv[i+3]=255;}
-        const lum2=new ZXing.RGBLuminanceSource(inv,W,H);
-        const bmp2=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum2));
-        const r2=zxingReader.decode(bmp2);
-        if(r2){onScanResult(r2.getText(),r2.getBarcodeFormat().toString());return;}
-      }catch(e){}
-    }
+  if(modeBarcode&&frameCount%2===0){
+    document.getElementById('scanStatus').textContent=`🔲 バーコード解析中 (${frameCount})`;
+    await tryZXing(new Uint8ClampedArray(imgData.data),W,H);
+    await tryZXing(normalCropData,cropW,ch);
+    await tryZXing(inv,W,H);
+    await tryZXing(cropData,cropW,ch);
   }
 
-  // OCR解析（4フレームに1回）
   if(modeOcr&&frameCount%4===0&&!ocrBusy){
-    const fw=parseInt(document.getElementById('frameSlider').value)/100;
-    const fh=parseInt(document.getElementById('heightSlider').value);
-    const cropW=Math.floor(W*fw);
-    const cropX=Math.floor(W*(1-fw)/2);
-    const ch=Math.min(Math.floor(fh*(H/260)),H);
-    const cy=Math.floor((H-ch)/2);
-    const normalCropData=new Uint8ClampedArray(cropW*ch*4);
-    const data=imgData.data;
-    for(let y=0;y<ch;y++){for(let x=0;x<cropW;x++){const si=((cy+y)*W+(cropX+x))*4;const di=(y*cropW+x)*4;normalCropData[di]=data[si];normalCropData[di+1]=data[si+1];normalCropData[di+2]=data[si+2];normalCropData[di+3]=255;}}
+    document.getElementById('scanStatus').textContent=`📝 OCR解析中...`;
     ocrBusy=true;
     await tryOCR(normalCropData,cropW,ch);
+    await tryOCR(cropData,cropW,ch);
     ocrBusy=false;
   }
 
