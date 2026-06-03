@@ -400,8 +400,8 @@ function renderHome(){
   document.getElementById('summ').innerHTML=`
     <div class="metric" onclick="switchTab('list')"><div class="mlabel">品目数</div><div class="mval green">${DATA.length}</div></div>
     <div class="metric" onclick="switchTab('list')"><div class="mlabel">在庫金額合計</div><div class="mval">${ts.toLocaleString()}円</div></div>
-    <div class="metric"><div class="mlabel">緊急対応</div><div class="mval red">${danger.length}品目</div></div>
-    <div class="metric"><div class="mlabel">要注意</div><div class="mval amber">${warn.length}品目</div></div>
+    <div class="metric" onclick="showAlertModal('danger')"><div class="mlabel">緊急対応 ▶</div><div class="mval red">${danger.length}品目</div></div>
+    <div class="metric" onclick="showAlertModal('warn')"><div class="mlabel">要注意 ▶</div><div class="mval amber">${warn.length}品目</div></div>
   `;
   const all=[...danger,...warn].slice(0,100);
   if(!all.length){document.getElementById('alertSection').innerHTML='<div class="emptymsg">アラートはありません ✅</div>';return;}
@@ -417,6 +417,7 @@ function renderHome(){
       </div>`;
     }).join('')}</div>`;
 }
+
 
 // ===== スキャン =====
 let stream=null,track=null,scanning=false,frameTimer=null;
@@ -976,25 +977,57 @@ function showDetail(r){
   const st=expSt(r.exp);
   const al=getAl(r);
   const flags=[r.geki?'劇薬':'',r.doku?'毒薬':'',r.muko?'向精神薬':''].filter(Boolean);
+  const safeName=r.name.replace(/'/g,"\\'");
   let html=`<div class="detail-card ${st.cls}">`;
   html+=`<div style="font-size:15px;font-weight:700;margin-bottom:8px">${r.name}</div>`;
   html+=`<div class="dexp ${st.cls}">${st.str}</div>`;
   html+=`<div style="font-size:12px;color:var(--text2);margin-bottom:10px">${st.label}</div>`;
   html+=`<div class="sr-grid">
     <div class="sr-item"><div class="sr-ilabel">在庫金額</div><div class="sr-ival">${r.stock.toLocaleString()}円</div></div>
-    <div class="sr-item"><div class="sr-ilabel">数量</div><div class="sr-ival ${r.qty<0?'neg':''}">${r.qty}</div></div>
-    <div class="sr-item"><div class="sr-ilabel">不動月数</div><div class="sr-ival">${r.rawM}</div></div>
-    <div class="sr-item"><div class="sr-ilabel">最終処方日</div><div class="sr-ival">${r.lastRx}</div></div>
-    <div class="sr-item"><div class="sr-ilabel">区分</div><div class="sr-ival">${r.cat}</div></div>
-    <div class="sr-item"><div class="sr-ilabel">先発/後発</div><div class="sr-ival">${r.brand}</div></div>
-    ${r.keika!=='-'?`<div class="sr-item"><div class="sr-ilabel">経過措置日</div><div class="sr-ival" style="color:var(--amber)">${r.keika}</div></div>`:''}
-    ${r.hanbai!=='-'?`<div class="sr-item"><div class="sr-ilabel">発売中止日</div><div class="sr-ival" style="color:var(--red)">${r.hanbai}</div></div>`:''}
+    <div class="sr-item"><div class="sr-ilabel">数量</div><div class="sr-ival ${r.qty<0?'neg':''}" id="searchQtyDisplay">${r.qty}</div></div>
+    <div class="sr-item"><div class="sr-ilabel">不動月数</div><div class="sr-ival">${r.rawM||'-'}</div></div>
+    <div class="sr-item"><div class="sr-ilabel">薬価在庫</div><div class="sr-ival">${(r.yakkaStock||0).toLocaleString()}円</div></div>
+    <div class="sr-item"><div class="sr-ilabel">最終処方日</div><div class="sr-ival">${r.lastRx||'-'}</div></div>
+    <div class="sr-item"><div class="sr-ilabel">先発/後発</div><div class="sr-ival">${r.brand||'-'}</div></div>
+    ${r.keika&&r.keika!=='-'?`<div class="sr-item"><div class="sr-ilabel">経過措置日</div><div class="sr-ival" style="color:var(--amber)">${r.keika}</div></div>`:''}
+    ${r.hanbai&&r.hanbai!=='-'?`<div class="sr-item"><div class="sr-ilabel">発売中止日</div><div class="sr-ival" style="color:var(--red)">${r.hanbai}</div></div>`:''}
   </div>`;
+  html+=`<div style="display:flex;gap:6px;align-items:center;margin-top:10px">
+    <span style="font-size:11px;color:var(--text3);white-space:nowrap">数量修正</span>
+    <input type="number" id="searchQtyInput" value="${r.qty}" step="1" style="flex:1;padding:6px 8px;font-size:15px;font-family:'IBM Plex Mono',monospace;border:1px solid #ccc9be;border-radius:6px;text-align:center">
+    <button onclick="saveQtyFromSearch('${safeName}')" style="padding:6px 14px;background:#2d5a3d;color:white;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:'Noto Sans JP',sans-serif">数量保存</button>
+  </div>
+  <div id="searchQtySaveStatus" style="font-size:11px;margin-top:4px"></div>`;
   if(al.length||flags.length) html+=`<div style="margin-top:10px">${al.map(a=>`<span class="badge ${a.cls}">${a.txt}</span>`).join('')}${flags.map(f=>`<span class="badge b-blue">${f}</span>`).join('')}</div>`;
   if(r.code) html+=`<div style="margin-top:8px;font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--text3)">明細コード：${r.code}</div>`;
   html+=`</div>`;
   document.getElementById('detailArea').innerHTML=html;
 }
+
+async function saveQtyFromSearch(name){
+  const qty=parseFloat(document.getElementById('searchQtyInput').value);
+  const st=document.getElementById('searchQtySaveStatus');
+  const disp=document.getElementById('searchQtyDisplay');
+  if(isNaN(qty)){if(st)st.innerHTML='<span style="color:var(--red)">数量を入力してください</span>';return;}
+  if(st) st.innerHTML='<span style="color:var(--text3)">📤 送信中...</span>';
+  const time=new Date().toLocaleString('ja-JP');
+  const device=navigator.userAgent.includes('iPhone')?'iPhone':navigator.userAgent.includes('Android')?'Android':'PC';
+  let sent=false;
+  try{
+    await fetch(GAS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'qty',name,qty,time,device})});
+    sent=true;
+    if(st) st.innerHTML='<span style="color:var(--accent)">✅ 保存しました</span>';
+    if(disp) disp.textContent=qty;
+  }catch(e){
+    if(st) st.innerHTML='<span style="color:var(--amber)">⚠️ 送信失敗</span>';
+  }
+  const drug=DATA.find(d=>d.name===name);
+  const prevQty=drug?drug.qty:null;
+  if(drug) drug.qty=qty;
+  qtyHistory.unshift({name,prevQty,qty,time,device,sent});
+  if(qtyHistory.length>200) qtyHistory.pop();
+}
+
 function clearSearch(){
   document.getElementById('searchInput').value='';document.getElementById('searchClear').style.display='none';
   document.getElementById('suggestList').style.display='none';document.getElementById('detailArea').innerHTML='';
@@ -1171,6 +1204,87 @@ function clearQtyHistory(){
   if(!confirm('修正履歴を全て削除しますか？')) return;
   qtyHistory=[];
   renderQtyHistory();
+}
+
+function showAlertModal(type){
+  const danger=DATA.filter(d=>getAl(d).some(a=>a.cls==='b-red'));
+  const warn=DATA.filter(d=>getAl(d).some(a=>a.cls==='b-amber')&&!getAl(d).some(a=>a.cls==='b-red'));
+  const list=type==='danger'?danger:warn;
+  const title=type==='danger'?`🔴 緊急対応（${list.length}品目）`:`🟡 要注意（${list.length}品目）`;
+
+  // 内訳を集計
+  const counts={};
+  list.forEach(r=>{
+    getAl(r).filter(a=>type==='danger'?a.cls==='b-red':a.cls==='b-amber').forEach(a=>{
+      counts[a.txt]=(counts[a.txt]||0)+1;
+    });
+  });
+  const summary=Object.entries(counts).map(([k,v])=>`${k}:${v}件`).join('　');
+
+  const html=`
+    <div id="alertModal" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:flex-end" onclick="if(event.target===this)closeAlertModal()">
+      <div style="background:var(--bg);border-radius:16px 16px 0 0;width:100%;max-height:85vh;display:flex;flex-direction:column">
+        <div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:15px;font-weight:700">${title}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">${summary}</div>
+          </div>
+          <button onclick="closeAlertModal()" style="background:var(--surface2);border:none;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer">×</button>
+        </div>
+        <div style="overflow-y:auto;padding:12px;flex:1">
+          ${list.map((r,i)=>{
+            const al=getAl(r).filter(a=>type==='danger'?a.cls==='b-red':a.cls==='b-amber');
+            const safeId='am_'+i;
+            const safeName=r.name.replace(/'/g,"\\'");
+            return`<div style="background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);border-left:3px solid ${type==='danger'?'var(--red)':'var(--amber)'};padding:10px 12px;margin-bottom:8px">
+              <div style="font-size:13px;font-weight:600;margin-bottom:6px">${r.name}</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:6px">
+                <div style="font-size:11px;color:var(--text3)">在庫金額<br><span style="font-size:12px;font-weight:600;color:var(--text1)">${r.stock.toLocaleString()}円</span></div>
+                <div style="font-size:11px;color:var(--text3)">不動月数<br><span style="font-size:13px;font-weight:600;color:var(--text1)">${r.rawM}ヶ月</span></div>
+                <div style="font-size:11px;color:var(--text3)">薬価在庫<br><span style="font-size:12px;font-weight:600;color:var(--text1)">${(r.yakkaStock||0).toLocaleString()}円</span></div>
+              </div>
+              <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+                <span style="font-size:11px;color:var(--text3);white-space:nowrap">数量</span>
+                <input type="number" id="${safeId}" value="${r.qty}" step="1" style="flex:1;padding:5px 8px;font-size:15px;font-family:'IBM Plex Mono',monospace;border:1px solid #ccc9be;border-radius:6px;text-align:center">
+                <button onclick="saveQtyFromModal('${safeName}','${safeId}')" style="padding:5px 12px;background:#2d5a3d;color:white;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:'Noto Sans JP',sans-serif">保存</button>
+              </div>
+              <div id="${safeId}_st" style="font-size:11px;min-height:16px"></div>
+              <div>${al.map(a=>`<span class="badge ${a.cls}">${a.txt}</span>`).join(' ')}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>`;
+
+  document.body.insertAdjacentHTML('beforeend',html);
+}
+
+async function saveQtyFromModal(name, inputId){
+  const qty=parseFloat(document.getElementById(inputId).value);
+  const st=document.getElementById(inputId+'_st');
+  if(isNaN(qty)){if(st)st.innerHTML='<span style="color:var(--red)">数量を入力してください</span>';return;}
+  if(st) st.innerHTML='<span style="color:var(--text3)">📤 送信中...</span>';
+  const time=new Date().toLocaleString('ja-JP');
+  const device=navigator.userAgent.includes('iPhone')?'iPhone':navigator.userAgent.includes('Android')?'Android':'PC';
+  let sent=false;
+  try{
+    await fetch(GAS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'qty',name,qty,time,device})});
+    sent=true;
+    if(st) st.innerHTML='<span style="color:var(--accent)">✅ 保存しました</span>';
+  }catch(e){
+    if(st) st.innerHTML='<span style="color:var(--amber)">⚠️ 送信失敗</span>';
+  }
+  // DATAとqtyHistoryも更新
+  const drug=DATA.find(d=>d.name===name);
+  const prevQty=drug?drug.qty:null;
+  if(drug) drug.qty=qty;
+  qtyHistory.unshift({name,prevQty,qty,time,device,sent});
+  if(qtyHistory.length>200) qtyHistory.pop();
+}
+
+function closeAlertModal(){
+  const m=document.getElementById('alertModal');
+  if(m) m.remove();
 }
 
 // 初期化
