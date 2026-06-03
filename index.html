@@ -1074,10 +1074,10 @@ function parseCSV(text){
   if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
   const lines=text.split('\n').filter(l=>l.trim());
   const headers=lines[0].split(',');
-  const idx={code:headers.indexOf('明細コード'),name:headers.indexOf('品名'),cat:headers.indexOf('使用区分'),brand:headers.indexOf('先発/後発'),maku:headers.indexOf('麻薬'),kaku:headers.indexOf('覚醒剤'),geki:headers.indexOf('劇薬'),doku:headers.indexOf('毒薬'),muko:headers.indexOf('向精神薬'),qty:headers.indexOf('数量'),stock:headers.indexOf('在庫金額'),months:headers.indexOf('不動月数'),lastRx:headers.indexOf('最終処方日'),exp:headers.indexOf('有効期限'),keika:headers.indexOf('経過措置日'),hanbai:headers.indexOf('発売中止日')};
+  const idx={code:headers.indexOf('明細コード'),name:headers.indexOf('品名'),cat:headers.indexOf('使用区分'),brand:headers.indexOf('先発/後発'),maku:headers.indexOf('麻薬'),kaku:headers.indexOf('覚醒剤'),geki:headers.indexOf('劇薬'),doku:headers.indexOf('毒薬'),muko:headers.indexOf('向精神薬'),qty:headers.indexOf('理論在庫'),stock:headers.indexOf('在庫金額'),months:headers.indexOf('不動月数'),lastRx:headers.indexOf('最終処方日'),exp:headers.indexOf('有効期限'),keika:headers.indexOf('経過措置日'),hanbai:headers.indexOf('発売中止日'),yakka:headers.indexOf('薬価'),yakkaStock:headers.indexOf('薬価在庫金額'),tanka:headers.indexOf('単価')};
   return lines.slice(1).map(line=>{
     const cols=line.split(',');
-    return{code:cols[idx.code]?.trim()||'',name:cols[idx.name]?.trim()||'',cat:cols[idx.cat]?.trim()||'',brand:cols[idx.brand]?.trim()||'',maku:!!cols[idx.maku]?.trim(),kaku:!!cols[idx.kaku]?.trim(),geki:!!cols[idx.geki]?.trim(),doku:!!cols[idx.doku]?.trim(),muko:!!cols[idx.muko]?.trim(),qty:parseFloat(cols[idx.qty])||0,stock:parseInt(cols[idx.stock])||0,rawM:cols[idx.months]?.trim()||'-',lastRx:cols[idx.lastRx]?.trim()||'-',exp:cols[idx.exp]?.trim()||'-',keika:cols[idx.keika]?.trim()||'-',hanbai:cols[idx.hanbai]?.trim()||'-'};
+    return{code:cols[idx.code]?.trim()||'',name:cols[idx.name]?.trim()||'',cat:cols[idx.cat]?.trim()||'',brand:cols[idx.brand]?.trim()||'',maku:!!cols[idx.maku]?.trim(),kaku:!!cols[idx.kaku]?.trim(),geki:!!cols[idx.geki]?.trim(),doku:!!cols[idx.doku]?.trim(),muko:!!cols[idx.muko]?.trim(),qty:parseFloat(cols[idx.qty])||0,stock:parseInt(cols[idx.stock])||0,yakkaStock:parseInt(cols[idx.yakkaStock])||0,yakka:parseFloat(cols[idx.yakka])||0,tanka:parseFloat(cols[idx.tanka])||0,rawM:cols[idx.months]?.trim()||'0',lastRx:cols[idx.lastRx]?.trim()||'-',exp:cols[idx.exp]?.trim()||'-',keika:cols[idx.keika]?.trim()||'-',hanbai:cols[idx.hanbai]?.trim()||'-'};
   }).filter(r=>r.name);
 }
 
