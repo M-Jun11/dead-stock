@@ -233,7 +233,7 @@
     <div class="ctrl-row">
       <span class="ctrl-label">⏱ 間隔</span>
       <select class="ctrl-sel" id="interval">
-        <option value="100" selected>100ms</option>
+        <option value="100" selected>100ms（高速）</option>
         <option value="200">200ms</option>
         <option value="300">300ms（省電力）</option>
       </select>
@@ -400,8 +400,8 @@ function renderHome(){
   document.getElementById('summ').innerHTML=`
     <div class="metric" onclick="switchTab('list')"><div class="mlabel">品目数</div><div class="mval green">${DATA.length}</div></div>
     <div class="metric" onclick="switchTab('list')"><div class="mlabel">在庫金額合計</div><div class="mval">${ts.toLocaleString()}円</div></div>
-    <div class="metric"><div class="mlabel">緊急対応</div><div class="mval red">${danger.length}品目</div></div>
-    <div class="metric"><div class="mlabel">要注意</div><div class="mval amber">${warn.length}品目</div></div>
+    <div class="metric" onclick="showAlertModal('danger')"><div class="mlabel">緊急対応 ▶</div><div class="mval red">${danger.length}品目</div></div>
+    <div class="metric" onclick="showAlertModal('warn')"><div class="mlabel">要注意 ▶</div><div class="mval amber">${warn.length}品目</div></div>
   `;
   const all=[...danger,...warn].slice(0,100);
   if(!all.length){document.getElementById('alertSection').innerHTML='<div class="emptymsg">アラートはありません ✅</div>';return;}
@@ -416,6 +416,87 @@ function renderHome(){
         <div class="alert-badges">${al.map(a=>`<span class="badge ${a.cls}">${a.txt}</span>`).join('')}</div>
       </div>`;
     }).join('')}</div>`;
+}
+
+function showAlertModal(type){
+  const danger=DATA.filter(d=>getAl(d).some(a=>a.cls==='b-red'));
+  const warn=DATA.filter(d=>getAl(d).some(a=>a.cls==='b-amber')&&!getAl(d).some(a=>a.cls==='b-red'));
+  const list=type==='danger'?danger:warn;
+  const title=type==='danger'?`🔴 緊急対応（${list.length}品目）`:`🟡 要注意（${list.length}品目）`;
+
+  // 内訳を集計
+  const counts={};
+  list.forEach(r=>{
+    getAl(r).filter(a=>type==='danger'?a.cls==='b-red':a.cls==='b-amber').forEach(a=>{
+      counts[a.txt]=(counts[a.txt]||0)+1;
+    });
+  });
+  const summary=Object.entries(counts).map(([k,v])=>`${k}:${v}件`).join('　');
+
+  const html=`
+    <div id="alertModal" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:flex-end" onclick="if(event.target===this)closeAlertModal()">
+      <div style="background:var(--bg);border-radius:16px 16px 0 0;width:100%;max-height:85vh;display:flex;flex-direction:column">
+        <div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:15px;font-weight:700">${title}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">${summary}</div>
+          </div>
+          <button onclick="closeAlertModal()" style="background:var(--surface2);border:none;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer">×</button>
+        </div>
+        <div style="overflow-y:auto;padding:12px;flex:1">
+          ${list.map((r,i)=>{
+            const al=getAl(r).filter(a=>type==='danger'?a.cls==='b-red':a.cls==='b-amber');
+            const safeId='am_'+i;
+            const safeName=r.name.replace(/'/g,"\\'");
+            return`<div style="background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);border-left:3px solid ${type==='danger'?'var(--red)':'var(--amber)'};padding:10px 12px;margin-bottom:8px">
+              <div style="font-size:13px;font-weight:600;margin-bottom:6px">${r.name}</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:6px">
+                <div style="font-size:11px;color:var(--text3)">在庫金額<br><span style="font-size:12px;font-weight:600;color:var(--text1)">${r.stock.toLocaleString()}円</span></div>
+                <div style="font-size:11px;color:var(--text3)">不動月数<br><span style="font-size:13px;font-weight:600;color:var(--text1)">${r.rawM}ヶ月</span></div>
+                <div style="font-size:11px;color:var(--text3)">薬価在庫<br><span style="font-size:12px;font-weight:600;color:var(--text1)">${(r.yakkaStock||0).toLocaleString()}円</span></div>
+              </div>
+              <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+                <span style="font-size:11px;color:var(--text3);white-space:nowrap">数量</span>
+                <input type="number" id="${safeId}" value="${r.qty}" step="1" style="flex:1;padding:5px 8px;font-size:15px;font-family:'IBM Plex Mono',monospace;border:1px solid #ccc9be;border-radius:6px;text-align:center">
+                <button onclick="saveQtyFromModal('${safeName}','${safeId}')" style="padding:5px 12px;background:#2d5a3d;color:white;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:'Noto Sans JP',sans-serif">保存</button>
+              </div>
+              <div id="${safeId}_st" style="font-size:11px;min-height:16px"></div>
+              <div>${al.map(a=>`<span class="badge ${a.cls}">${a.txt}</span>`).join(' ')}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>`;
+
+  document.body.insertAdjacentHTML('beforeend',html);
+}
+
+async function saveQtyFromModal(name, inputId){
+  const qty=parseFloat(document.getElementById(inputId).value);
+  const st=document.getElementById(inputId+'_st');
+  if(isNaN(qty)){if(st)st.innerHTML='<span style="color:var(--red)">数量を入力してください</span>';return;}
+  if(st) st.innerHTML='<span style="color:var(--text3)">📤 送信中...</span>';
+  const time=new Date().toLocaleString('ja-JP');
+  const device=navigator.userAgent.includes('iPhone')?'iPhone':navigator.userAgent.includes('Android')?'Android':'PC';
+  let sent=false;
+  try{
+    await fetch(GAS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,qty,time,device})});
+    sent=true;
+    if(st) st.innerHTML='<span style="color:var(--accent)">✅ 保存しました</span>';
+  }catch(e){
+    if(st) st.innerHTML='<span style="color:var(--amber)">⚠️ 送信失敗</span>';
+  }
+  // DATAとqtyHistoryも更新
+  const drug=DATA.find(d=>d.name===name);
+  const prevQty=drug?drug.qty:null;
+  if(drug) drug.qty=qty;
+  qtyHistory.unshift({name,prevQty,qty,time,device,sent});
+  if(qtyHistory.length>200) qtyHistory.pop();
+}
+
+function closeAlertModal(){
+  const m=document.getElementById('alertModal');
+  if(m) m.remove();
 }
 
 // ===== スキャン =====
@@ -543,69 +624,63 @@ function calcExpStatus(expiry){
   return{cls:'ok',label:`残り約${Math.floor(diff/365)}年${Math.floor((diff%365)/30)}ヶ月`};
 }
 
-// スキャン途中の蓄積データ
+// スキャン蓄積データ
 let scanAccum={gtin:null, expiry:null, drug:null, lot:null};
 
 function onScanResult(raw, fmt){
   const now=Date.now();
-  if(raw===lastRaw&&now-lastTime<3000) return;
+  if(raw===lastRaw&&now-lastTime<2000) return;
   lastRaw=raw; lastTime=now;
 
   const p=fmt==='OCR'?parseOCRText(raw):parseGS1(raw);
 
-  // 蓄積：GTINが取れたらdrug情報を更新
+  // 蓄積
   if(p.gtin) scanAccum.gtin=p.gtin;
   if(p.expiry) scanAccum.expiry=p.expiry;
   if(p.lot) scanAccum.lot=p.lot;
-  if(p.gtin||(!scanAccum.drug)){
-    const found=findByGTIN(scanAccum.gtin||p.gtin);
+  if(p.gtin){
+    const found=findByGTIN(p.gtin);
     if(found) scanAccum.drug=found;
   }
 
   const drug=scanAccum.drug;
   const expiry=scanAccum.expiry;
-  const gtin=scanAccum.gtin;
-  const lot=scanAccum.lot;
 
-  // 揃っているか判定
-  const hasName=!!drug;
-  const hasExp=!!expiry;
-
-  // まだ揃っていない場合はスキャン継続（途中結果を表示）
-  if(!hasName||!hasExp){
+  // GTINと有効期限の両方が揃ったら停止
+  if(!drug||!expiry){
+    // 途中経過を表示
     const card=document.getElementById('scanResult');
     card.style.display='block';
     card.className='scan-result unknown';
-    let msg='📷 スキャン中...';
-    if(hasName&&!hasExp) msg=`✅ ${drug.name} ／ 📷 有効期限を読み取り中...`;
-    else if(!hasName&&hasExp) msg=`✅ 有効期限: ${expiry} ／ 📷 バーコードを読み取り中...`;
-    else msg='📷 バーコードと有効期限を読み取り中...';
-    card.innerHTML=`<div style="font-size:13px;color:var(--text2);text-align:center;padding:8px">${msg}</div>`;
-    document.getElementById('scanStatus').textContent=msg;
-    slog(`⏳ ${fmt} GTIN:${gtin||'—'} 期限:${expiry||'—'}`,'');
-    return; // まだ停止しない
+    const parts=[];
+    if(drug) parts.push(`✅ ${drug.name}`);
+    else parts.push('📷 バーコード読取中...');
+    if(expiry) parts.push(`✅ 期限:${expiry}`);
+    else parts.push('📷 期限読取中...');
+    card.innerHTML=`<div style="font-size:13px;color:var(--text2);padding:10px;text-align:center">${parts.join('<br>')}</div>`;
+    document.getElementById('scanStatus').textContent=parts.join(' ／ ');
+    return;
   }
 
-  // 全部揃った→停止して結果表示
+  // 両方揃った→停止
   scanning=false;
   clearTimeout(frameTimer);
-  const startBtn=document.getElementById('startBtn');
-  const stopBtn=document.getElementById('stopBtn');
-  if(startBtn) startBtn.style.display='';
-  if(stopBtn) stopBtn.style.display='none';
+  document.getElementById('startBtn').style.display='';
+  document.getElementById('stopBtn').style.display='none';
 
   const expStat=calcExpStatus(expiry);
-  const al=drug?getAl(drug):[];
+  const al=getAl(drug);
   const time=new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
+  const gtin=scanAccum.gtin;
+  const lot=scanAccum.lot;
 
-  // 結果カード表示
   const card=document.getElementById('scanResult');
   card.className=`scan-result ${expStat.cls}`;
   card.style.display='block';
   card.innerHTML=
     `<div class="sr-title">スキャン結果 (${fmt})</div>`+
     `<div class="sr-name">${drug.name}</div>`+
-    `<div class="sr-exp ${expStat.cls}">${expiry||'—'}</div>`+
+    `<div class="sr-exp ${expStat.cls}">${expiry}</div>`+
     `<div class="sr-label">${expStat.label}</div>`+
     `<div class="sr-grid">
       <div class="sr-item"><div class="sr-ilabel">在庫金額</div><div class="sr-ival">${drug.stock.toLocaleString()}円</div></div>
@@ -623,33 +698,18 @@ function onScanResult(raw, fmt){
     (gtin?`<div class="sr-raw">GTIN：${gtin}</div>`:'')+
     `<button onclick="nextScan()" style="margin-top:10px;width:100%;padding:8px;background:#2d5a3d;color:white;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif">▶ 次へ</button>`;
 
-  // 履歴追加
-  scanHist.unshift({
-    name:drug.name,
-    exp:expiry||'—',
-    expLabel:expStat.label,
-    cls:expStat.cls,
-    time,
-    qty:drug.qty,
-    stock:drug.stock,
-    yakkaStock:drug.yakkaStock,
-    rawM:drug.rawM,
-    lot:lot||null,
-    gtin:gtin||null,
-  });
+  scanHist.unshift({name:drug.name,exp:expiry,expLabel:expStat.label,cls:expStat.cls,time,qty:drug.qty,stock:drug.stock,yakkaStock:drug.yakkaStock,rawM:drug.rawM,lot,gtin});
   if(scanHist.length>50) scanHist.pop();
   renderScanHist();
 
-  // 蓄積データをリセット
-  scanAccum={gtin:null, expiry:null, drug:null, lot:null};
-
+  scanAccum={gtin:null,expiry:null,drug:null,lot:null};
   document.getElementById('scanStatus').textContent='✅ 読み取り完了！　▶次へ で続けてスキャン';
-  slog(`✅ ${fmt} GTIN:${gtin||'—'} 期限:${expiry||'—'} ロット:${lot||'—'}`,'lok');
+  slog(`✅ ${fmt} GTIN:${gtin||'—'} 期限:${expiry||'—'}`,'lok');
 }
 
 function nextScan(){
   lastRaw=''; lastTime=0;
-  scanAccum={gtin:null, expiry:null, drug:null, lot:null};
+  scanAccum={gtin:null,expiry:null,drug:null,lot:null};
   const card=document.getElementById('scanResult');
   if(card) card.style.display='none';
   document.getElementById('scanStatus').textContent='📷 カメラを準備中...';
