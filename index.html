@@ -816,23 +816,29 @@ async function analyzeFrame(){
 
   frameCount++;
 
-  // バーコード解析（偶数フレーム）：通常・反転の両方を試行
-  if(modeBarcode&&frameCount%2===0){
-    document.getElementById('scanStatus').textContent=`🔲 バーコード解析中 (${frameCount})`;
-    // 通常画像（白背景・黒バー）
-    await tryZXing(new Uint8ClampedArray(imgData.data),W,H,'通常全体');
-    await tryZXing(normalCropData,cropW,ch,'通常切出');
-    // 反転画像（黒背景・白バー）
-    await tryZXing(inv,W,H,'反転全体');
-    await tryZXing(cropData,cropW,ch,'反転切出');
+  // バーコード解析（毎フレーム・切り出し部分のみ）
+  if(modeBarcode){
+    try{
+      const lum=new ZXing.RGBLuminanceSource(new Uint8ClampedArray(imgData.data),W,H);
+      const bmp=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+      const r=zxingReader.decode(bmp);
+      if(r) onScanResult(r.getText(),r.getBarcodeFormat().toString());
+    }catch(e){}
+    // 反転（黒背景バーコード対応）
+    if(scanning){
+      try{
+        const lum2=new ZXing.RGBLuminanceSource(inv,W,H);
+        const bmp2=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum2));
+        const r2=zxingReader.decode(bmp2);
+        if(r2) onScanResult(r2.getText(),r2.getBarcodeFormat().toString());
+      }catch(e){}
+    }
   }
 
-  // OCR解析（4フレームに1回）：通常・反転の両方を試行
+  // OCR解析（4フレームに1回）
   if(modeOcr&&frameCount%4===0&&!ocrBusy){
-    document.getElementById('scanStatus').textContent=`📝 OCR解析中...`;
     ocrBusy=true;
-    await tryOCR(normalCropData,cropW,ch); // 通常（白背景）
-    await tryOCR(cropData,cropW,ch);       // 反転（黒背景→白背景）
+    await tryOCR(normalCropData,cropW,ch);
     ocrBusy=false;
   }
 
@@ -917,7 +923,7 @@ async function startScan(){
     stream=await navigator.mediaDevices.getUserMedia({
       video:{
         facingMode:{ideal:'environment'},
-        width:{ideal:1920,min:1280},height:{ideal:1080,min:720},
+        width:{ideal:1280,min:640},height:{ideal:720,min:480},
         focusMode:{ideal:'continuous'},exposureMode:{ideal:'continuous'},
       }
     });
