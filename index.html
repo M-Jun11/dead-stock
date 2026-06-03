@@ -772,71 +772,51 @@ async function analyzeFrame(){
   offCanvas.width=W; offCanvas.height=H;
   offCtx.drawImage(video,0,0,W,H);
 
-  // 反転処理
   const imgData=offCtx.getImageData(0,0,W,H);
-  const data=imgData.data;
-  const inv=new Uint8ClampedArray(data.length);
-  for(let i=0;i<data.length;i+=4){inv[i]=255-data[i];inv[i+1]=255-data[i+1];inv[i+2]=255-data[i+2];inv[i+3]=255;}
 
-  // スライダー値から切り出し領域を計算
-  const fw=parseInt(document.getElementById('frameSlider').value)/100;
-  const fh=parseInt(document.getElementById('heightSlider').value);
-  const cropW=Math.floor(W*fw);
-  const cropX=Math.floor(W*(1-fw)/2);
-  const videoDisplayH=260;
-  const ch=Math.min(Math.floor(fh*(H/videoDisplayH)),H);
-  const cy=Math.floor((H-ch)/2);
-
-  const cropData=new Uint8ClampedArray(cropW*ch*4);
-  for(let y=0;y<ch;y++){
-    for(let x=0;x<cropW;x++){
-      const si=((cy+y)*W+(cropX+x))*4;
-      const di=(y*cropW+x)*4;
-      cropData[di]=inv[si];cropData[di+1]=inv[si+1];cropData[di+2]=inv[si+2];cropData[di+3]=255;
-    }
-  }
-
-  // 通常画像の切り出し（白背景・黒バー対応）
-  const normalCropData=new Uint8ClampedArray(cropW*ch*4);
-  for(let y=0;y<ch;y++){
-    for(let x=0;x<cropW;x++){
-      const si=((cy+y)*W+(cropX+x))*4;
-      const di=(y*cropW+x)*4;
-      normalCropData[di]=data[si];normalCropData[di+1]=data[si+1];normalCropData[di+2]=data[si+2];normalCropData[di+3]=255;
-    }
-  }
-
-  // プレビュー表示（反転画像）
+  // プレビュー表示
   if(modePreview){
     let pc=document.getElementById('previewCanvas');
     if(!pc){pc=document.createElement('canvas');pc.id='previewCanvas';pc.style.cssText='width:100%;border-radius:6px;margin-bottom:8px;border:1px solid var(--border)';document.getElementById('scanResult').before(pc);}
-    pc.width=cropW;pc.height=ch;
-    pc.getContext('2d').putImageData(new ImageData(cropData,cropW,ch),0,0);
+    pc.width=W;pc.height=H;
+    pc.getContext('2d').putImageData(imgData,0,0);
   }
 
   frameCount++;
 
-  // バーコード解析（毎フレーム・切り出し部分のみ）
+  // バーコード解析（毎フレーム）
   if(modeBarcode){
     try{
       const lum=new ZXing.RGBLuminanceSource(new Uint8ClampedArray(imgData.data),W,H);
       const bmp=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
       const r=zxingReader.decode(bmp);
-      if(r) onScanResult(r.getText(),r.getBarcodeFormat().toString());
+      if(r){onScanResult(r.getText(),r.getBarcodeFormat().toString());return;}
     }catch(e){}
-    // 反転（黒背景バーコード対応）
+    // 反転（黒背景バーコード対応）- scanning継続中のみ
     if(scanning){
       try{
+        const data=imgData.data;
+        const inv=new Uint8ClampedArray(data.length);
+        for(let i=0;i<data.length;i+=4){inv[i]=255-data[i];inv[i+1]=255-data[i+1];inv[i+2]=255-data[i+2];inv[i+3]=255;}
         const lum2=new ZXing.RGBLuminanceSource(inv,W,H);
         const bmp2=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum2));
         const r2=zxingReader.decode(bmp2);
-        if(r2) onScanResult(r2.getText(),r2.getBarcodeFormat().toString());
+        if(r2){onScanResult(r2.getText(),r2.getBarcodeFormat().toString());return;}
       }catch(e){}
     }
   }
 
   // OCR解析（4フレームに1回）
   if(modeOcr&&frameCount%4===0&&!ocrBusy){
+    const fw=parseInt(document.getElementById('frameSlider').value)/100;
+    const fh=parseInt(document.getElementById('heightSlider').value);
+    const cropW=Math.floor(W*fw);
+    const cropX=Math.floor(W*(1-fw)/2);
+    const ch=Math.min(Math.floor(fh*(H/260)),H);
+    const cy=Math.floor((H-ch)/2);
+    const normalCropData=new Uint8ClampedArray(cropW*ch*4);
+    const data=imgData.data;
+    for(let y=0;y<ch;y++){for(let x=0;x<cropW;x++){const si=((cy+y)*W+(cropX+x))*4;const di=(y*cropW+x)*4;normalCropData[di]=data[si];normalCropData[di+1]=data[si+1];normalCropData[di+2]=data[si+2];normalCropData[di+3]=255;}}
     ocrBusy=true;
     await tryOCR(normalCropData,cropW,ch);
     ocrBusy=false;
