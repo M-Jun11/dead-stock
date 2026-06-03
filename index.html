@@ -543,18 +543,50 @@ function calcExpStatus(expiry){
   return{cls:'ok',label:`残り約${Math.floor(diff/365)}年${Math.floor((diff%365)/30)}ヶ月`};
 }
 
+// スキャン途中の蓄積データ
+let scanAccum={gtin:null, expiry:null, drug:null, lot:null};
+
 function onScanResult(raw, fmt){
   const now=Date.now();
   if(raw===lastRaw&&now-lastTime<3000) return;
   lastRaw=raw; lastTime=now;
 
   const p=fmt==='OCR'?parseOCRText(raw):parseGS1(raw);
-  const drug=findByGTIN(p.gtin);
-  const expStat=calcExpStatus(p.expiry);
-  const al=drug?getAl(drug):[];
-  const time=new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
 
-  // 自動停止
+  // 蓄積：GTINが取れたらdrug情報を更新
+  if(p.gtin) scanAccum.gtin=p.gtin;
+  if(p.expiry) scanAccum.expiry=p.expiry;
+  if(p.lot) scanAccum.lot=p.lot;
+  if(p.gtin||(!scanAccum.drug)){
+    const found=findByGTIN(scanAccum.gtin||p.gtin);
+    if(found) scanAccum.drug=found;
+  }
+
+  const drug=scanAccum.drug;
+  const expiry=scanAccum.expiry;
+  const gtin=scanAccum.gtin;
+  const lot=scanAccum.lot;
+
+  // 揃っているか判定
+  const hasName=!!drug;
+  const hasExp=!!expiry;
+
+  // まだ揃っていない場合はスキャン継続（途中結果を表示）
+  if(!hasName||!hasExp){
+    const card=document.getElementById('scanResult');
+    card.style.display='block';
+    card.className='scan-result unknown';
+    let msg='📷 スキャン中...';
+    if(hasName&&!hasExp) msg=`✅ ${drug.name} ／ 📷 有効期限を読み取り中...`;
+    else if(!hasName&&hasExp) msg=`✅ 有効期限: ${expiry} ／ 📷 バーコードを読み取り中...`;
+    else msg='📷 バーコードと有効期限を読み取り中...';
+    card.innerHTML=`<div style="font-size:13px;color:var(--text2);text-align:center;padding:8px">${msg}</div>`;
+    document.getElementById('scanStatus').textContent=msg;
+    slog(`⏳ ${fmt} GTIN:${gtin||'—'} 期限:${expiry||'—'}`,'');
+    return; // まだ停止しない
+  }
+
+  // 全部揃った→停止して結果表示
   scanning=false;
   clearTimeout(frameTimer);
   const startBtn=document.getElementById('startBtn');
@@ -562,16 +594,20 @@ function onScanResult(raw, fmt){
   if(startBtn) startBtn.style.display='';
   if(stopBtn) stopBtn.style.display='none';
 
+  const expStat=calcExpStatus(expiry);
+  const al=drug?getAl(drug):[];
+  const time=new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
+
   // 結果カード表示
   const card=document.getElementById('scanResult');
   card.className=`scan-result ${expStat.cls}`;
   card.style.display='block';
   card.innerHTML=
     `<div class="sr-title">スキャン結果 (${fmt})</div>`+
-    `<div class="sr-name">${drug?drug.name:'在庫リストに一致する薬品なし'}</div>`+
-    `<div class="sr-exp ${expStat.cls}">${p.expiry||'—'}</div>`+
+    `<div class="sr-name">${drug.name}</div>`+
+    `<div class="sr-exp ${expStat.cls}">${expiry||'—'}</div>`+
     `<div class="sr-label">${expStat.label}</div>`+
-    (drug?`<div class="sr-grid">
+    `<div class="sr-grid">
       <div class="sr-item"><div class="sr-ilabel">在庫金額</div><div class="sr-ival">${drug.stock.toLocaleString()}円</div></div>
       <div class="sr-item"><div class="sr-ilabel">数量</div><div class="sr-ival ${drug.qty<0?'neg':''}" id="qtyDisplay">${drug.qty}</div></div>
       <div class="sr-item"><div class="sr-ilabel">不動月数</div><div class="sr-ival">${drug.rawM}</div></div>
@@ -582,34 +618,38 @@ function onScanResult(raw, fmt){
       <button onclick="saveQty('${drug.name.replace(/'/g,"\\'")}',document.getElementById('qtyInput').value)" style="padding:6px 14px;background:#2d5a3d;color:white;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif">数量保存</button>
     </div>
     <div id="qtySaveStatus" style="font-size:11px;margin-top:4px"></div>
-    ${al.length?`<div style="margin-top:8px">${al.map(a=>`<span class="badge ${a.cls}">${a.txt}</span>`).join('')}</div>`:''}`:'')+(
-    p.lot?`<div class="sr-raw">ロット：${p.lot}</div>`:'')+
-    (p.gtin?`<div class="sr-raw">GTIN：${p.gtin}</div>`:'')+
+    ${al.length?`<div style="margin-top:8px">${al.map(a=>`<span class="badge ${a.cls}">${a.txt}</span>`).join('')}</div>`:''}`+
+    (lot?`<div class="sr-raw">ロット：${lot}</div>`:'')+
+    (gtin?`<div class="sr-raw">GTIN：${gtin}</div>`:'')+
     `<button onclick="nextScan()" style="margin-top:10px;width:100%;padding:8px;background:#2d5a3d;color:white;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif">▶ 次へ</button>`;
 
-  // 履歴追加（詳細データも保存）
+  // 履歴追加
   scanHist.unshift({
-    name:drug?drug.name:'不明',
-    exp:p.expiry||'—',
+    name:drug.name,
+    exp:expiry||'—',
     expLabel:expStat.label,
     cls:expStat.cls,
     time,
-    qty:drug?drug.qty:null,
-    stock:drug?drug.stock:null,
-    yakkaStock:drug?drug.yakkaStock:null,
-    rawM:drug?drug.rawM:null,
-    lot:p.lot||null,
-    gtin:p.gtin||null,
+    qty:drug.qty,
+    stock:drug.stock,
+    yakkaStock:drug.yakkaStock,
+    rawM:drug.rawM,
+    lot:lot||null,
+    gtin:gtin||null,
   });
   if(scanHist.length>50) scanHist.pop();
   renderScanHist();
 
-  document.getElementById('scanStatus').textContent='✅ 読み取り成功！　▶次へ で続けてスキャン';
-  slog(`✅ ${fmt} GTIN:${p.gtin||'—'} 期限:${p.expiry||'—'} ロット:${p.lot||'—'}`,'lok');
+  // 蓄積データをリセット
+  scanAccum={gtin:null, expiry:null, drug:null, lot:null};
+
+  document.getElementById('scanStatus').textContent='✅ 読み取り完了！　▶次へ で続けてスキャン';
+  slog(`✅ ${fmt} GTIN:${gtin||'—'} 期限:${expiry||'—'} ロット:${lot||'—'}`,'lok');
 }
 
 function nextScan(){
   lastRaw=''; lastTime=0;
+  scanAccum={gtin:null, expiry:null, drug:null, lot:null};
   const card=document.getElementById('scanResult');
   if(card) card.style.display='none';
   document.getElementById('scanStatus').textContent='📷 カメラを準備中...';
