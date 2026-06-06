@@ -1151,7 +1151,7 @@ async function saveQty(name, qty){
     await fetch(GAS_URL,{
       method:'POST', mode:'no-cors',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name, qty, time, device})
+      body:JSON.stringify({type:'qty', name, qty, time, device})
     });
     sent=true;
     if(st) st.innerHTML='<span style="color:#2d5a3d">✅ '+qty+'に修正・保存しました</span>';
