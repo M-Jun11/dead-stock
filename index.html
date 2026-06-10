@@ -783,15 +783,15 @@ async function analyzeFrame(){
 
   frameCount++;
 
-  // バーコード解析（偶数フレーム）：通常・反転の両方を試行
-  if(modeBarcode&&frameCount%2===0){
+  // バーコード解析（毎フレーム）：通常・反転の両方を試行
+  if(modeBarcode){
     document.getElementById('scanStatus').textContent=`🔲 バーコード解析中 (${frameCount})`;
     // 通常画像（白背景・黒バー）
     await tryZXing(new Uint8ClampedArray(imgData.data),W,H,'通常全体');
-    await tryZXing(normalCropData,cropW,ch,'通常切出');
+    if(scanning) await tryZXing(normalCropData,cropW,ch,'通常切出');
     // 反転画像（黒背景・白バー）
-    await tryZXing(inv,W,H,'反転全体');
-    await tryZXing(cropData,cropW,ch,'反転切出');
+    if(scanning) await tryZXing(inv,W,H,'反転全体');
+    if(scanning) await tryZXing(cropData,cropW,ch,'反転切出');
   }
 
   // OCR解析（4フレームに1回）：通常・反転の両方を試行
