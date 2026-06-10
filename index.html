@@ -404,6 +404,7 @@ async function registerGtin(gtin){
 }
 
 
+async function saveGtinMaster(gtin, name){
   gtinMaster[gtin]=name;
   try{
     const time=new Date().toLocaleString('ja-JP');
@@ -1348,7 +1349,7 @@ renderHistChips();
 renderScanHist();
 
 // GTINマスターをGASから読み込む
-loadGtinMaster();
+(async()=>{ await loadGtinMaster(); })();
 </script>
 </body>
 </html>
