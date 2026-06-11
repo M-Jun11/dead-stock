@@ -787,31 +787,12 @@ async function analyzeFrame(){
   // バーコード解析（毎フレーム）：通常・反転の両方を試行
   if(modeBarcode){
     document.getElementById('scanStatus').textContent=`🔲 バーコード解析中 (${frameCount})`;
-    const d=imgData.data;
     // 通常画像（白背景・黒バー）
-    await tryZXing(new Uint8ClampedArray(d),W,H,'通常全体');
+    await tryZXing(new Uint8ClampedArray(imgData.data),W,H,'通常全体');
     if(scanning) await tryZXing(normalCropData,cropW,ch,'通常切出');
     // 反転画像（黒背景・白バー）
     if(scanning) await tryZXing(inv,W,H,'反転全体');
     if(scanning) await tryZXing(cropData,cropW,ch,'反転切出');
-    // 180度回転
-    if(scanning){
-      const rot180=new Uint8ClampedArray(d.length);
-      for(let i=0;i<W*H;i++){const src=(W*H-1-i)*4,dst=i*4;rot180[dst]=d[src];rot180[dst+1]=d[src+1];rot180[dst+2]=d[src+2];rot180[dst+3]=d[src+3];}
-      await tryZXing(rot180,W,H,'180度');
-    }
-    // 90度回転（縦向き対応）
-    if(scanning){
-      const rot90=new Uint8ClampedArray(d.length);
-      for(let y=0;y<H;y++){for(let x=0;x<W;x++){const src=(y*W+x)*4,dst=(x*H+(H-1-y))*4;rot90[dst]=d[src];rot90[dst+1]=d[src+1];rot90[dst+2]=d[src+2];rot90[dst+3]=d[src+3];}}
-      await tryZXing(rot90,H,W,'90度');
-    }
-    // 270度回転
-    if(scanning){
-      const rot270=new Uint8ClampedArray(d.length);
-      for(let y=0;y<H;y++){for(let x=0;x<W;x++){const src=(y*W+x)*4,dst=((W-1-x)*H+y)*4;rot270[dst]=d[src];rot270[dst+1]=d[src+1];rot270[dst+2]=d[src+2];rot270[dst+3]=d[src+3];}}
-      await tryZXing(rot270,H,W,'270度');
-    }
   }
 
   // OCR解析（4フレームに1回）：通常・反転の両方を試行
