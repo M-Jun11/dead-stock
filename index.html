@@ -991,7 +991,7 @@ function onSearch(){
   if(!q){document.getElementById('suggestList').style.display='none';document.getElementById('detailArea').innerHTML='';document.getElementById('histSection').style.display='block';return;}
   document.getElementById('histSection').style.display='none';
   const ql=q.toLowerCase();
-  const matches=DATA.filter(r=>r.name.toLowerCase().includes(ql)||(r.code&&r.code.includes(ql))).slice(0,8);
+  const matches=DATA.filter(r=>r.name.toLowerCase().includes(ql)||(r.code&&r.code.includes(ql)));
   const sl=document.getElementById('suggestList');
   if(!matches.length){sl.innerHTML='<div style="padding:12px 14px;font-size:13px;color:var(--text3)">該当する薬品が見つかりません</div>';sl.style.display='block';return;}
   sl.innerHTML=matches.map(r=>{
