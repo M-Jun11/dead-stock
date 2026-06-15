@@ -453,6 +453,7 @@ function switchTab(t){
 }
 
 // ===== ホーム =====
+let alertShowAll=false;
 function renderHome(){
   const ts=DATA.filter(d=>d.stock>0).reduce((s,d)=>s+d.stock,0);
   const danger=DATA.filter(d=>getAl(d).some(a=>a.cls==='b-red'));
@@ -463,11 +464,16 @@ function renderHome(){
     <div class="metric"><div class="mlabel">緊急対応</div><div class="mval red">${danger.length}品目</div></div>
     <div class="metric"><div class="mlabel">要注意</div><div class="mval amber">${warn.length}品目</div></div>
   `;
-  const all=[...danger,...warn].slice(0,100);
+  const all=[...danger,...warn];
   if(!all.length){document.getElementById('alertSection').innerHTML='<div class="emptymsg">アラートはありません ✅</div>';return;}
-  document.getElementById('alertSection').innerHTML=
-    `<div style="font-size:12px;font-weight:500;color:var(--text2);margin-bottom:8px">要対応アラート（${all.length}件）</div>`+
-    `<div class="alert-list">${all.map((r,i)=>{
+  renderAlertList(all);
+}
+
+function renderAlertList(all){
+  const SHOW=30;
+  const list=alertShowAll?all:all.slice(0,SHOW);
+  const html=`<div style="font-size:12px;font-weight:500;color:var(--text2);margin-bottom:8px">要対応アラート（${all.length}件）</div>`+
+    `<div class="alert-list">${list.map((r,i)=>{
       const al=getAl(r);
       const isDanger=al.some(a=>a.cls==='b-red');
       const safeId='ha_'+i;
@@ -498,7 +504,16 @@ function renderHome(){
           <div id="${safeId}_st" style="font-size:11px;min-height:16px"></div>
         </div>
       </div>`;
-    }).join('')}</div>`;
+    }).join('')}</div>`+
+    (all.length>SHOW?`<button class="hist-more-btn" onclick="toggleAlertMore()">${alertShowAll?'▲ 閉じる':'▼ もっと見る（残り'+(all.length-SHOW)+'件）'}</button>`:'');
+  document.getElementById('alertSection').innerHTML=html;
+}
+
+function toggleAlertMore(){
+  alertShowAll=!alertShowAll;
+  const danger=DATA.filter(d=>getAl(d).some(a=>a.cls==='b-red'));
+  const warn=DATA.filter(d=>getAl(d).some(a=>a.cls==='b-amber')&&!getAl(d).some(a=>a.cls==='b-red'));
+  renderAlertList([...danger,...warn]);
 }
 
 function toggleAlertDetail(id){
