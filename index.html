@@ -344,10 +344,13 @@ const TODAY = new Date('2026-03-23');
 let DATA = [];
 
 // スキャン完了音（ピンポンッ）
+let beepBusy=false;
 function beep(){
+  if(beepBusy) return;
+  beepBusy=true;
+  setTimeout(()=>beepBusy=false,600);
   try{
     const ctx=new(window.AudioContext||window.webkitAudioContext)();
-    // 「ピン」高音
     const osc1=ctx.createOscillator();
     const g1=ctx.createGain();
     osc1.connect(g1);g1.connect(ctx.destination);
@@ -357,7 +360,6 @@ function beep(){
     g1.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.25);
     osc1.start(ctx.currentTime);
     osc1.stop(ctx.currentTime+0.25);
-    // 「ポンッ」低音
     const osc2=ctx.createOscillator();
     const g2=ctx.createGain();
     osc2.connect(g2);g2.connect(ctx.destination);
@@ -1344,7 +1346,9 @@ function showAlertModal(type){
               <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
                 <span style="font-size:11px;color:var(--text3);white-space:nowrap">数量</span>
                 <input type="number" id="${safeId}" value="${r.qty}" step="1" style="flex:1;padding:5px 8px;font-size:15px;font-family:'IBM Plex Mono',monospace;border:1px solid #ccc9be;border-radius:6px;text-align:center">
-                <button onclick="saveQtyFromModal('${safeName}','${safeId}')" style="padding:5px 12px;background:#2d5a3d;color:white;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:'Noto Sans JP',sans-serif">保存</button>
+                <button onclick="saveQtyFromModal('${safeName}','${safeId}')" style="padding:5px 12px;background:#2d5a3d;color:white;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:'Noto Sans JP',sans-serif">✏️ 修正保存</button>
+              </div>
+              <button onclick="urgentConfirm('${safeName}','${safeId}')" style="width:100%;margin-top:6px;padding:5px;background:#1a6b8a;color:white;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif">✅ 数量確認済み（変更なし）</button>
               </div>
               <div id="${safeId}_st" style="font-size:11px;min-height:16px"></div>
               <div>${al.map(a=>`<span class="badge ${a.cls}">${a.txt}</span>`).join(' ')}</div>
@@ -1355,6 +1359,21 @@ function showAlertModal(type){
     </div>`;
 
   document.body.insertAdjacentHTML('beforeend',html);
+}
+
+async function urgentConfirm(name, inputId){
+  const qty=parseFloat(document.getElementById(inputId).value);
+  const st=document.getElementById(inputId+'_st');
+  if(isNaN(qty)){if(st)st.innerHTML='<span style="color:var(--red)">数量を確認してください</span>';return;}
+  if(st) st.innerHTML='<span style="color:var(--text3)">📤 送信中...</span>';
+  const time=new Date().toLocaleString('ja-JP');
+  const device=navigator.userAgent.includes('iPhone')?'iPhone':navigator.userAgent.includes('Android')?'Android':'PC';
+  try{
+    await fetch(GAS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'urgent_confirm',name,qty,time,device})});
+    if(st) st.innerHTML='<span style="color:#1a6b8a">✅ 緊急確認済みとして記録しました</span>';
+  }catch(e){
+    if(st) st.innerHTML='<span style="color:var(--amber)">⚠️ 送信失敗</span>';
+  }
 }
 
 async function saveQtyFromModal(name, inputId){
