@@ -343,26 +343,29 @@
 const TODAY = new Date('2026-03-23');
 let DATA = [];
 
-// スキャン完了音（風鈴・チリンッ）
+// スキャン完了音（南部鉄器風鈴）
 let beepBusy=false;
 function beep(){
   if(beepBusy) return;
   beepBusy=true;
-  setTimeout(()=>beepBusy=false,800);
+  setTimeout(()=>beepBusy=false,3000);
   try{
     const ctx=new(window.AudioContext||window.webkitAudioContext)();
-    // 高音の基音
-    [[2637,1.0],[5274,0.5],[7911,0.25],[3520,0.4]].forEach(([freq,vol],i)=>{
+    // 南部鉄器は低めの基音＋非整数倍音で金属的な音
+    [[800,1.0],[1320,0.7],[2100,0.4],[3150,0.25],[520,0.5]].forEach(([freq,vol],i)=>{
       const osc=ctx.createOscillator();
       const g=ctx.createGain();
       osc.connect(g);g.connect(ctx.destination);
       osc.type='sine';
       osc.frequency.value=freq;
-      const start=ctx.currentTime+i*0.015;
-      g.gain.setValueAtTime(vol*0.2,start);
-      g.gain.exponentialRampToValueAtTime(0.001,start+1.5);
+      const start=ctx.currentTime+i*0.008;
+      // 鉄器らしい長い余韻（3秒）
+      g.gain.setValueAtTime(vol*0.22,start);
+      g.gain.setValueAtTime(vol*0.22,start+0.02);
+      g.gain.exponentialRampToValueAtTime(vol*0.08,start+0.5);
+      g.gain.exponentialRampToValueAtTime(0.001,start+3.0);
       osc.start(start);
-      osc.stop(start+1.5);
+      osc.stop(start+3.0);
     });
   }catch(e){}
 }
