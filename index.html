@@ -1247,12 +1247,12 @@ function renderList(){
     return`<tr>
       <td class="num" style="color:var(--text3);font-size:11px">${r.code||'—'}</td>
       <td class="ncell" title="${r.name}">${r.name}</td>
-      <td>${r.cat}</td><td>${r.brand==='先発品'?'先発':'後発'}</td>
+      <td>${r.cat||'—'}</td><td>${r.brand==='先発品'?'先発':r.brand?'後発':'—'}</td>
       <td>${flags.map(f=>`<span class="badge b-blue">${f}</span>`).join('')}</td>
       <td class="${neg?'neg':'num'}">${r.qty}${r.unit||''}</td><td class="${neg?'neg':'num'}">${r.stock.toLocaleString()}</td>
-      <td class="num">${r.rawM}</td><td>${r.lastRx}</td><td>${r.exp}</td>
-      <td class="${r.keika!=='-'?kc:'muted'}">${r.keika!=='-'?r.keika:'—'}</td>
-      <td class="${r.hanbai!=='-'?'kr':'muted'}">${r.hanbai!=='-'?r.hanbai:'—'}</td>
+      <td class="num">${r.rawM||'—'}</td><td>${r.lastRx||'—'}</td><td>${r.exp||'—'}</td>
+      <td class="${r.keika&&r.keika!=='-'?kc:'muted'}">${r.keika&&r.keika!=='-'?r.keika:'—'}</td>
+      <td class="${r.hanbai&&r.hanbai!=='-'?'kr':'muted'}">${r.hanbai&&r.hanbai!=='-'?r.hanbai:'—'}</td>
       <td>${al.map(a=>`<span class="badge ${a.cls}">${a.txt}</span>`).join('')}</td>
     </tr>`;
   }).join(''):`<tr><td colspan="13" class="empty">該当するデータがありません</td></tr>`;
