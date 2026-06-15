@@ -690,6 +690,8 @@ function nextScan(){
   card.innerHTML='';
   document.getElementById('scanStatus').textContent='📷 スキャン中… バーコードを枠内に合わせてください';
   scanning=true;
+  // GTINマスターを再読み込み
+  loadGtinMaster();
   analyzeFrame();
 }
 
