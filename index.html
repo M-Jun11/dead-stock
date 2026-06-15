@@ -343,26 +343,31 @@
 const TODAY = new Date('2026-03-23');
 let DATA = [];
 
-// スキャン完了音（ベル）
+// スキャン完了音（ピンポンッ）
 function beep(){
   try{
     const ctx=new(window.AudioContext||window.webkitAudioContext)();
-    const gain=ctx.createGain();
-    gain.connect(ctx.destination);
-
-    // 基音と倍音を重ねてベルらしい音に
-    [[523,1.0],[1047,0.6],[1568,0.3],[2093,0.15]].forEach(([freq,vol])=>{
-      const osc=ctx.createOscillator();
-      const g=ctx.createGain();
-      osc.connect(g);
-      g.connect(ctx.destination);
-      osc.type='sine';
-      osc.frequency.value=freq;
-      g.gain.setValueAtTime(vol*0.25,ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+1.2);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime+1.2);
-    });
+    // 「ピン」高音
+    const osc1=ctx.createOscillator();
+    const g1=ctx.createGain();
+    osc1.connect(g1);g1.connect(ctx.destination);
+    osc1.type='sine';
+    osc1.frequency.value=1047;
+    g1.gain.setValueAtTime(0.35,ctx.currentTime);
+    g1.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.25);
+    osc1.start(ctx.currentTime);
+    osc1.stop(ctx.currentTime+0.25);
+    // 「ポンッ」低音
+    const osc2=ctx.createOscillator();
+    const g2=ctx.createGain();
+    osc2.connect(g2);g2.connect(ctx.destination);
+    osc2.type='sine';
+    osc2.frequency.value=523;
+    g2.gain.setValueAtTime(0,ctx.currentTime+0.18);
+    g2.gain.setValueAtTime(0.4,ctx.currentTime+0.19);
+    g2.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.45);
+    osc2.start(ctx.currentTime+0.18);
+    osc2.stop(ctx.currentTime+0.45);
   }catch(e){}
 }
 
