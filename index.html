@@ -460,10 +460,86 @@ function renderHome(){
   document.getElementById('summ').innerHTML=`
     <div class="metric" onclick="switchTab('list')"><div class="mlabel">品目数</div><div class="mval green">${DATA.length}</div></div>
     <div class="metric" onclick="switchTab('list')"><div class="mlabel">在庫金額合計</div><div class="mval">${ts.toLocaleString()}円</div></div>
-    <div class="metric" onclick="showAlertModal('danger')" style="cursor:pointer"><div class="mlabel">🔴 緊急対応 ▶</div><div class="mval red">${danger.length}品目</div></div>
-    <div class="metric" onclick="showAlertModal('warn')" style="cursor:pointer"><div class="mlabel">🟡 要注意 ▶</div><div class="mval amber">${warn.length}品目</div></div>
+    <div class="metric"><div class="mlabel">緊急対応</div><div class="mval red">${danger.length}品目</div></div>
+    <div class="metric"><div class="mlabel">要注意</div><div class="mval amber">${warn.length}品目</div></div>
   `;
-  document.getElementById('alertSection').innerHTML='';
+  const all=[...danger,...warn].slice(0,100);
+  if(!all.length){document.getElementById('alertSection').innerHTML='<div class="emptymsg">アラートはありません ✅</div>';return;}
+  document.getElementById('alertSection').innerHTML=
+    `<div style="font-size:12px;font-weight:500;color:var(--text2);margin-bottom:8px">要対応アラート（${all.length}件）</div>`+
+    `<div class="alert-list">${all.map((r,i)=>{
+      const al=getAl(r);
+      const isDanger=al.some(a=>a.cls==='b-red');
+      const safeId='ha_'+i;
+      const safeName=r.name.replace(/'/g,"\\'");
+      return`<div class="alert-item ${isDanger?'danger':'warn'}" style="flex-direction:column;padding:0;overflow:hidden">
+        <div onclick="toggleAlertDetail('${safeId}')" style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:12px 14px;cursor:pointer;width:100%;box-sizing:border-box">
+          <div style="flex:1;overflow:hidden">
+            <div class="alert-name">${r.name}</div>
+            <div class="alert-detail">${r.stock.toLocaleString()}円　${r.qty}${r.unit||''}　不動:${r.rawM}</div>
+          </div>
+          <div style="flex-shrink:0">
+            <div>${al.map(a=>`<span class="badge ${a.cls}">${a.txt}</span>`).join('')}</div>
+            <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:4px">▼ 詳細</div>
+          </div>
+        </div>
+        <div id="${safeId}" style="display:none;padding:0 14px 12px;border-top:1px solid var(--border)">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:8px;padding-top:10px">
+            <div style="font-size:11px;color:var(--text3)">在庫金額<br><span style="font-size:12px;font-weight:600;color:var(--text1)">${r.stock.toLocaleString()}円</span></div>
+            <div style="font-size:11px;color:var(--text3)">不動月数<br><span style="font-size:13px;font-weight:600;color:var(--text1)">${r.rawM}ヶ月</span></div>
+            <div style="font-size:11px;color:var(--text3)">薬価在庫<br><span style="font-size:12px;font-weight:600;color:var(--text1)">${(r.yakkaStock||0).toLocaleString()}円</span></div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+            <span style="font-size:11px;color:var(--text3);white-space:nowrap">数量</span>
+            <input type="number" id="${safeId}_qty" value="${r.qty}" step="1" style="flex:1;padding:5px 8px;font-size:15px;font-family:'IBM Plex Mono',monospace;border:1px solid #ccc9be;border-radius:6px;text-align:center">
+            <button onclick="saveQtyFromAlert('${safeName}','${safeId}_qty','${safeId}_st')" style="padding:5px 10px;background:#2d5a3d;color:white;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:'Noto Sans JP',sans-serif">✏️ 修正保存</button>
+          </div>
+          <button onclick="confirmQtyFromAlert('${safeName}','${safeId}_qty','${safeId}_st')" style="width:100%;padding:5px;background:#1a6b8a;color:white;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif;margin-bottom:6px">✅ 数量確認済み（変更なし）</button>
+          <div id="${safeId}_st" style="font-size:11px;min-height:16px"></div>
+        </div>
+      </div>`;
+    }).join('')}</div>`;
+}
+
+function toggleAlertDetail(id){
+  const el=document.getElementById(id);
+  if(el) el.style.display=el.style.display==='none'?'block':'none';
+}
+
+async function saveQtyFromAlert(name, inputId, stId){
+  const qty=parseFloat(document.getElementById(inputId).value);
+  const st=document.getElementById(stId);
+  if(isNaN(qty)){if(st)st.innerHTML='<span style="color:var(--red)">数量を入力してください</span>';return;}
+  if(st) st.innerHTML='<span style="color:var(--text3)">📤 送信中...</span>';
+  const time=new Date().toLocaleString('ja-JP');
+  const device=navigator.userAgent.includes('iPhone')?'iPhone':navigator.userAgent.includes('Android')?'Android':'PC';
+  let sent=false;
+  try{
+    await fetch(GAS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'qty',name,qty,time,device})});
+    sent=true;
+    if(st) st.innerHTML='<span style="color:var(--accent)">✅ 保存しました</span>';
+  }catch(e){
+    if(st) st.innerHTML='<span style="color:var(--amber)">⚠️ 送信失敗</span>';
+  }
+  const drug=DATA.find(d=>d.name===name);
+  const prevQty=drug?drug.qty:null;
+  if(drug) drug.qty=qty;
+  qtyHistory.unshift({name,prevQty,qty,time,device,sent});
+}
+
+async function confirmQtyFromAlert(name, inputId, stId){
+  const qty=parseFloat(document.getElementById(inputId).value);
+  const st=document.getElementById(stId);
+  if(isNaN(qty)){if(st)st.innerHTML='<span style="color:var(--red)">数量を確認してください</span>';return;}
+  if(st) st.innerHTML='<span style="color:var(--text3)">📤 送信中...</span>';
+  const time=new Date().toLocaleString('ja-JP');
+  const device=navigator.userAgent.includes('iPhone')?'iPhone':navigator.userAgent.includes('Android')?'Android':'PC';
+  try{
+    await fetch(GAS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'urgent_confirm',name,qty,time,device})});
+    if(st) st.innerHTML=`<span style="color:#1a6b8a">✅ 確認済み　<span style="font-weight:700">${time}</span></span>`;
+  }catch(e){
+    if(st) st.innerHTML='<span style="color:var(--amber)">⚠️ 送信失敗</span>';
+  }
 }
 
 
