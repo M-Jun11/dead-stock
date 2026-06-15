@@ -460,22 +460,10 @@ function renderHome(){
   document.getElementById('summ').innerHTML=`
     <div class="metric" onclick="switchTab('list')"><div class="mlabel">品目数</div><div class="mval green">${DATA.length}</div></div>
     <div class="metric" onclick="switchTab('list')"><div class="mlabel">在庫金額合計</div><div class="mval">${ts.toLocaleString()}円</div></div>
-    <div class="metric" onclick="showAlertModal('danger')"><div class="mlabel">緊急対応 ▶</div><div class="mval red">${danger.length}品目</div></div>
-    <div class="metric" onclick="showAlertModal('warn')"><div class="mlabel">要注意 ▶</div><div class="mval amber">${warn.length}品目</div></div>
+    <div class="metric" onclick="showAlertModal('danger')" style="cursor:pointer"><div class="mlabel">🔴 緊急対応 ▶</div><div class="mval red">${danger.length}品目</div></div>
+    <div class="metric" onclick="showAlertModal('warn')" style="cursor:pointer"><div class="mlabel">🟡 要注意 ▶</div><div class="mval amber">${warn.length}品目</div></div>
   `;
-  const all=[...danger,...warn].slice(0,100);
-  if(!all.length){document.getElementById('alertSection').innerHTML='<div class="emptymsg">アラートはありません ✅</div>';return;}
-  document.getElementById('alertSection').innerHTML=
-    `<div style="font-size:12px;font-weight:500;color:var(--text2);margin-bottom:8px">要対応アラート（${all.length}件）</div>`+
-    `<div class="alert-list">${all.map(r=>{
-      const al=getAl(r);
-      const isDanger=al.some(a=>a.cls==='b-red');
-      return`<div class="alert-item ${isDanger?'danger':'warn'}">
-        <div><div class="alert-name">${r.name}</div>
-        <div class="alert-detail">${r.stock.toLocaleString()}円　${r.qty}${r.unit||''}　不動:${r.rawM}</div></div>
-        <div class="alert-badges">${al.map(a=>`<span class="badge ${a.cls}">${a.txt}</span>`).join('')}</div>
-      </div>`;
-    }).join('')}</div>`;
+  document.getElementById('alertSection').innerHTML='';
 }
 
 
