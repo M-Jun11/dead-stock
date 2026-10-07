@@ -1503,6 +1503,7 @@ function closeAlertModal(){
 }
 
 // 初期化
+(function(){const t=new Date();document.getElementById('updatedDate').textContent=`${t.getFullYear()}/${String(t.getMonth()+1).padStart(2,'0')}/${String(t.getDate()).padStart(2,'0')}`;})();
 renderHome();
 renderHistChips();
 renderScanHist();
